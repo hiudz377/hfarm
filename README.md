@@ -93,6 +93,12 @@ Xem `mobile/README.md` (cần Node >= 22.13).
 
 ## Các nhóm API
 - Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors
+  - `GET /api/products` lọc + sắp xếp + phân trang. Tham số (đều tùy chọn): `q` (tìm theo tên), `category_id`,
+    `brand_id` / `size_id` / `color_id` (một hoặc nhiều id cách nhau dấu phẩy, ví dụ `size_id=2,3`),
+    `min_price` / `max_price` (tính theo giá thấp nhất của các biến thể đang bán, gồm cả biên),
+    `in_stock=1` (chỉ sản phẩm còn hàng), `sort=newest` (mặc định) | `price_asc` | `price_desc` | `bestseller` (bán chạy, bỏ đơn hủy/hoàn trả),
+    `page`, `limit`. `size_id`, `color_id` và `in_stock` phải cùng khớp MỘT biến thể đang bán (chọn size M + màu đen + còn hàng = có biến thể M/đen còn hàng).
+    Giá trị sai (id không phải số, giá âm, `sort` lạ...) trả 400 kèm thông báo tiếng Việt. CMS (`/api/admin/products`) dùng chung các tham số này.
 - Khách hàng (cần đăng nhập): /api/me, /api/me/addresses, /api/cart, /api/orders
   - `POST /api/orders/quote`: body `{ "items": [{ "variant_id": 1, "quantity": 2 }], "coupon_code": "SALE10" }` (cả hai tùy chọn; bỏ `items` = lấy từ giỏ). Trả `{ subtotal, discount_amount, shipping_fee, total_amount }`, dùng chung hàm tính với `POST /api/orders` nên luôn khớp; không ghi DB và không kiểm tra tồn kho. Lỗi (mã sai/hết hạn, đơn tối thiểu, giỏ trống...) trả 400 kèm thông báo tiếng Việt.
   - `POST /api/orders` trả thêm `order_code`.

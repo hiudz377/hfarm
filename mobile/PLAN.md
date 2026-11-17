@@ -117,6 +117,14 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - Ảnh sản phẩm (dữ liệu thử không có ảnh).
 - Chưa có lần chạy nào trên dữ liệu thật của bạn (database thật chỉ được đọc để lấy danh sách mã giảm giá / số lượng sản phẩm, không ghi gì).
 - Nhãn thanh tab bị cụt chân chữ trên web: container nhãn co lại còn 10px (`overflow: hidden`) do chiều cao thanh tab trên web; chưa biết có xảy ra trên native không.
+## Giai đoạn 4 - Mở rộng sản phẩm (đang làm)
+
+### 4.1 Lọc và sắp xếp ở Cửa hàng
+- [x] Backend `GET /api/products`: `sort` (newest | price_asc | price_desc | bestseller), `min_price`/`max_price`, `size_id`, `color_id`, `brand_id` (nhiều id), `in_stock`. `sort` chỉ nhận giá trị trong danh sách (không ghép chuỗi vào SQL); đầu vào sai trả 400. CMS dùng chung hàm nên cũng có các tham số này.
+- [x] Mobile: nút "Lọc và sắp xếp" (dấu số nhóm lọc đang bật, "N sản phẩm · kiểu sắp xếp", "Xóa lọc" giữ kiểu sắp xếp), bảng trượt từ dưới lên `FilterSheet` (sắp xếp, 4 khoảng giá, size, màu có chấm màu, thương hiệu, "chỉ còn hàng"), nháp chỉ áp dụng khi bấm "Áp dụng"; màn trống có nút "Xóa bộ lọc"
+- Kiểm tra đã chạy: API trên MySQL thật nhưng database tạm (đã xóa; `clothing_store` không bị đụng) 51 kiểm tra đạt (từng bộ lọc và tổ hợp, biên giá, biến thể ngừng bán/sản phẩm nháp không lọt vào, size + màu + còn hàng phải cùng một biến thể, phân trang khi sắp xếp, đầu vào xấu/chèn SQL trả 400, CMS giữ hành vi cũ); logic lọc của app 23 kiểm tra; `expo export` Android + iOS; bản web của app trên Edge nối backend + DB tạm, 32 bước đạt.
+- **Chưa kiểm tra**: trên điện thoại / Expo Go (Modal trượt, `Switch`, vùng an toàn phía dưới bảng, nút Back của Android đóng bảng).
+
 ## Giả định và việc cần quyết định sau
 
 - Dữ liệu: `database/seed.sql` mà README gốc nhắc **không có trong repo**, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.

@@ -21,7 +21,8 @@ router.get('/colors', wrap(async (req, res) => {
   res.json(rows);
 }));
 
-// ?q=áo&category_id=1&brand_id=1&page=1&limit=10
+// ?q=áo&category_id=1&brand_id=1,2&size_id=2,3&color_id=1&min_price=100000&max_price=500000&in_stock=1
+// &sort=newest|price_asc|price_desc|bestseller&page=1&limit=10
 router.get('/products', wrap(async (req, res) => res.json(await listProducts(req.query, true))));
 router.get('/products/:id', wrap(async (req, res) => res.json(await getProduct(req.params.id, true))));
 
