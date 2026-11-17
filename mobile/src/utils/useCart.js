@@ -1,11 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchCart } from '@/api/cart';
+import { useAuth } from '@/auth/AuthProvider';
 import { ADDRESSES_KEY, CART_KEY, ORDERS_KEY, PRODUCTS_KEY, PRODUCT_KEY, QUOTE_KEY, orderKey } from './queryKeys';
 
 // Giữ export cũ để các màn đã viết không phải đổi import
 export { ADDRESSES_KEY, CART_KEY, QUOTE_KEY };
 
-export const useCart = (options) => useQuery({ queryKey: CART_KEY, queryFn: fetchCart, ...options });
+// Giỏ hàng cần đăng nhập: khách chưa đăng nhập thì không gọi API (tránh 401), cart = undefined
+export const useCart = (options) => {
+  const { status } = useAuth();
+  return useQuery({ queryKey: CART_KEY, queryFn: fetchCart, ...options, enabled: status === 'authenticated' && (options?.enabled ?? true) });
+};
 
 // Số "món" (dòng hàng) trong giỏ - dùng cho badge trên tab
 export const cartLineCount = (cart) => cart?.items?.length ?? 0;

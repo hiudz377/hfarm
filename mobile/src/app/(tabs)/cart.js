@@ -4,12 +4,14 @@ import { useRouter } from 'expo-router';
 import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { removeCartItem, updateCartItem } from '@/api/cart';
+import { useAuth } from '@/auth/AuthProvider';
 import { quoteOrder } from '@/api/orders';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import CartItemRow from '@/components/CartItemRow';
 import EmptyState from '@/components/EmptyState';
 import KeyboardView from '@/components/KeyboardView';
+import LoginPanel from '@/components/LoginPanel';
 import Loading from '@/components/Loading';
 import PriceSummary from '@/components/PriceSummary';
 import { CART_KEY, QUOTE_KEY, cartIssueCount, cartSignature, useCart } from '@/utils/useCart';
@@ -18,7 +20,16 @@ import { useFocusRefresh, usePullRefresh } from '@/utils/useRefresh';
 import { goneVariantId } from '@/utils/viMessage';
 import { colors, radius, space } from '@/utils/theme';
 
+// Giỏ hàng gắn với tài khoản: chưa đăng nhập thì mời đăng nhập thay vì gọi API
 export default function Cart() {
+  const { status } = useAuth();
+  if (status !== 'authenticated') {
+    return <LoginPanel title="Đăng nhập để xem giỏ hàng" message="Giỏ hàng gắn với tài khoản của bạn. Hãy đăng nhập để xem và thanh toán." />;
+  }
+  return <CartScreen />;
+}
+
+function CartScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const cart = useCart();

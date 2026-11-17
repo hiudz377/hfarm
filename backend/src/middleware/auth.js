@@ -5,7 +5,17 @@ const { httpError } = require('../utils');
 const DEV_ROLES = ['admin', 'staff', 'customer'];
 
 // Bỏ dấu "/" thừa ở cuối để issuer khớp chính xác với claim "iss" của Keycloak
-const issuerUrl = () => `${String(process.env.KEYCLOAK_URL).replace(/\/+$/, '')}/realms/${process.env.KEYCLOAK_REALM}`;
+const trimSlash = (s) => String(s).trim().replace(/\/+$/, '');
+const issuerUrl = () => `${trimSlash(process.env.KEYCLOAK_URL)}/realms/${process.env.KEYCLOAK_REALM}`;
+
+// Keycloak ghi vào claim "iss" đúng địa chỉ mà client đã dùng để lấy token: web CMS dùng
+// http://localhost:8080 còn điện thoại dùng http://<IP-LAN>:8080 nên cùng một realm có nhiều issuer.
+// KEYCLOAK_ISSUERS (cách nhau dấu phẩy) liệt kê các issuer được chấp nhận; để trống = chỉ issuer mặc định
+// (KEYCLOAK_URL + realm). Chữ ký vẫn luôn được kiểm tra bằng JWKS lấy từ KEYCLOAK_URL.
+const allowedIssuers = () => {
+  const list = String(process.env.KEYCLOAK_ISSUERS || '').split(',').map(trimSlash).filter(Boolean);
+  return list.length ? list : [issuerUrl()];
+};
 
 // Gọi lúc khởi động: thiếu cấu hình thì dừng ngay với thông báo rõ ràng, thay vì để mọi request
 // bị trả 401 "Token không hợp lệ" mà không biết nguyên nhân.
@@ -13,6 +23,9 @@ function assertAuthConfig() {
   if (process.env.AUTH_ENABLED !== 'true') return;
   const missing = ['KEYCLOAK_URL', 'KEYCLOAK_REALM'].filter((k) => !String(process.env[k] || '').trim());
   if (missing.length) throw new Error(`AUTH_ENABLED=true nhưng thiếu biến môi trường: ${missing.join(', ')}`);
+  for (const issuer of allowedIssuers()) {
+    try { new URL(issuer); } catch { throw new Error(`KEYCLOAK_ISSUERS có giá trị không phải URL hợp lệ: "${issuer}"`); }
+  }
 }
 
 let JWKS;
@@ -72,9 +85,13 @@ async function authenticate(req, res, next) {
       if (!token) throw httpError(401, 'Chưa đăng nhập');
       let payload;
       try {
-        ({ payload } = await jwtVerify(token, getJwks(), { issuer: issuerUrl() }));
+        ({ payload } = await jwtVerify(token, getJwks(), { issuer: allowedIssuers() }));
       } catch (e) {
-        if (isTokenError(e)) throw httpError(401, 'Token không hợp lệ hoặc đã hết hạn');
+        if (isTokenError(e)) {
+          // Lỗi hay gặp khi đổi Wi-Fi/IP: token hợp lệ nhưng issuer chưa có trong KEYCLOAK_ISSUERS. Ghi log để dễ tìm ra.
+          if (e.claim === 'iss') console.warn(`Token bị từ chối: issuer "${e.payload?.iss}" không có trong danh sách cho phép (${allowedIssuers().join(', ')}). Thêm vào KEYCLOAK_ISSUERS nếu đúng là Keycloak của bạn.`);
+          throw httpError(401, 'Token không hợp lệ hoặc đã hết hạn');
+        }
         console.error('Không xác thực được token với Keycloak:', e.message);
         throw httpError(503, 'Không kết nối được máy chủ xác thực (Keycloak)');
       }

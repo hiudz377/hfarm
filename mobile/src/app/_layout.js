@@ -1,8 +1,8 @@
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
-import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import { colors, screenHeader } from '@/utils/theme';
 
@@ -12,24 +12,35 @@ const queryClient = new QueryClient({
 });
 
 function Routes() {
-  const { status } = useAuth();
+  const router = useRouter();
+  const { status, sessionExpired } = useAuth();
+  const signedIn = status === 'authenticated';
+
+  // Phiên hết hạn giữa chừng (backend từ chối token, refresh token hết hạn): đưa về màn đăng nhập
+  useEffect(() => {
+    if (sessionExpired) router.push('/login');
+  }, [sessionExpired, router]);
+
+  // Đang khôi phục phiên đã lưu từ lần mở trước
   if (status === 'loading') return <Loading />;
-  // TODO(keycloak): thay bằng màn hình đăng nhập khi status === 'unauthenticated'
-  if (status !== 'authenticated') {
-    return <EmptyState icon="lock-closed-outline" title="Chưa đăng nhập" message={__DEV__ ? "Chưa hỗ trợ đăng nhập. [dev] Đặt EXPO_PUBLIC_AUTH_MODE=dev trong mobile/.env." : "Tính năng đăng nhập chưa sẵn sàng. Vui lòng thử lại sau."} />;
-  }
+
   return (
     // headerTransparent: false - từ iOS 26 header mặc định trong suốt và nội dung trượt xuống dưới header
     <Stack screenOptions={{ ...screenHeader, headerTransparent: false, contentStyle: { backgroundColor: colors.bg } }}>
+      {/* Xem cửa hàng và sản phẩm tự do, không cần đăng nhập. Giỏ hàng / Đơn hàng / Tài khoản (trong tabs) tự hiện lời mời đăng nhập */}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
-      <Stack.Screen name="order/[id]" options={{ title: 'Chi tiết đơn hàng' }} />
-      <Stack.Screen name="profile" options={{ title: 'Thông tin cá nhân' }} />
-      <Stack.Screen name="addresses" options={{ title: 'Sổ địa chỉ' }} />
-      <Stack.Screen name="checkout" options={{ title: 'Thanh toán' }} />
-      <Stack.Screen name="address-form" options={{ title: 'Địa chỉ', presentation: 'modal' }} />
-      {/* Đã đặt xong: không cho vuốt/bấm quay lại màn thanh toán (giỏ đã trống) */}
-      <Stack.Screen name="order-success" options={{ title: 'Đặt hàng thành công', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
+      <Stack.Screen name="login" options={{ title: 'Đăng nhập', presentation: 'modal' }} />
+      {/* Các màn dưới đây cần đăng nhập: mở bằng liên kết khi chưa đăng nhập hoặc vừa đăng xuất thì bị đưa về màn đầu */}
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="order/[id]" options={{ title: 'Chi tiết đơn hàng' }} />
+        <Stack.Screen name="profile" options={{ title: 'Thông tin cá nhân' }} />
+        <Stack.Screen name="addresses" options={{ title: 'Sổ địa chỉ' }} />
+        <Stack.Screen name="checkout" options={{ title: 'Thanh toán' }} />
+        <Stack.Screen name="address-form" options={{ title: 'Địa chỉ', presentation: 'modal' }} />
+        {/* Đã đặt xong: không cho vuốt/bấm quay lại màn thanh toán (giỏ đã trống) */}
+        <Stack.Screen name="order-success" options={{ title: 'Đặt hàng thành công', headerBackVisible: false, headerLeft: () => null, gestureEnabled: false }} />
+      </Stack.Protected>
     </Stack>
   );
 }

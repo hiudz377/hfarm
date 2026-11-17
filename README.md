@@ -65,6 +65,10 @@ Mở http://localhost:8080 và đăng nhập trang quản trị Keycloak. Cổng
 **3. Bật xác thực**:
 - `backend/.env`: `AUTH_ENABLED=true`, `KEYCLOAK_URL=http://localhost:8080`, `KEYCLOAK_REALM=hfarm`
   (thiếu hai biến Keycloak thì backend không khởi động). Khởi động lại backend.
+- `KEYCLOAK_ISSUERS` (không bắt buộc): danh sách issuer được chấp nhận, cách nhau dấu phẩy. Cần khi web (`localhost`) và điện thoại (IP LAN)
+  cùng dùng một realm, vì Keycloak ghi vào token đúng địa chỉ client dùng để lấy token. Ví dụ
+  `KEYCLOAK_ISSUERS=http://localhost:8080/realms/hfarm,http://192.168.1.18:8080/realms/hfarm`. Để trống = chỉ issuer mặc định
+  (`KEYCLOAK_URL` + realm). Chữ ký vẫn luôn được kiểm tra bằng JWKS lấy từ `KEYCLOAK_URL`.
 - `CORS_ORIGIN` (không bắt buộc): các origin được gọi API, cách nhau dấu phẩy. Bỏ trống khi bật xác thực = chỉ `http://localhost:5173`.
 - `web/.env`: `VITE_KEYCLOAK_URL=http://localhost:8080`, `VITE_KEYCLOAK_REALM=hfarm`, `VITE_KEYCLOAK_CLIENT_ID=hfarm-web`
   (đã có sẵn trong `web/.env.example`). Sửa `.env` xong phải khởi động lại `npm run dev`.
@@ -81,8 +85,8 @@ Mở http://localhost:8080 và đăng nhập trang quản trị Keycloak. Cổng
 | Khách hàng (xem, khóa/mở), Mã giảm giá | có | 403 |
 
 Mã lỗi: thiếu hoặc sai token = `401`; đủ token nhưng không đủ quyền hoặc tài khoản bị khóa = `403`;
-backend không hỏi được Keycloak = `503`. App mobile chưa tích hợp Keycloak nên khi `AUTH_ENABLED=true` sẽ nhận `401`
-ở `/api/me`, `/api/cart`, `/api/orders`; hãy giữ `AUTH_ENABLED=false` khi chạy mobile.
+backend không hỏi được Keycloak = `503`. App mobile đăng nhập Keycloak bằng client riêng `hfarm-mobile` khi đặt `EXPO_PUBLIC_AUTH_MODE=keycloak`
+(xem `mobile/README.md`); ở chế độ `dev` mobile cần `AUTH_ENABLED=false`. App native không bị ràng buộc bởi CORS.
 
 ## 4. Mobile khách hàng (Expo)
 Xem `mobile/README.md` (cần Node >= 22.13).

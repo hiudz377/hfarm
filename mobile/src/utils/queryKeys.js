@@ -8,3 +8,6 @@ export const ORDERS_KEY = ['orders']; // ['orders', { status }] (danh sách, ph�
 export const orderKey = (id) => ['order', String(id)]; // chi tiết 1 đơn
 export const PRODUCTS_KEY = ['products'];
 export const PRODUCT_KEY = ['product']; // ['product', id]
+
+// Dữ liệu riêng của người dùng đang đăng nhập: bị xóa khi phiên đổi để không lộ dữ liệu của người trước
+export const PRIVATE_QUERY_KEYS = [CART_KEY, QUOTE_KEY, ADDRESSES_KEY, ME_KEY, ORDERS_KEY, ['order']];

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { addToCart } from '@/api/cart';
+import { useAuth } from '@/auth/AuthProvider';
 import { fetchProduct } from '@/api/products';
 import Button from '@/components/Button';
 import Chip from '@/components/Chip';
@@ -36,6 +37,7 @@ export default function ProductDetail() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const queryClient = useQueryClient();
+  const { status } = useAuth();
 
   const { data: product, isPending, isError, error, refetch } = useQuery({
     queryKey: ['product', String(id)],
@@ -195,6 +197,14 @@ export default function ProductDetail() {
           disabled={!canAdd}
           loading={add.isPending}
           onPress={() => {
+            // Xem sản phẩm tự do, nhưng thêm vào giỏ thì cần đăng nhập
+            if (status !== 'authenticated') {
+              Alert.alert('Cần đăng nhập', 'Hãy đăng nhập hoặc tạo tài khoản để thêm sản phẩm vào giỏ hàng.', [
+                { text: 'Để sau', style: 'cancel' },
+                { text: 'Đăng nhập', onPress: () => router.push('/login') },
+              ]);
+              return;
+            }
             if (adding.current || add.isPending) return;
             adding.current = true;
             add.mutate({ variantId: variant.id, quantity });

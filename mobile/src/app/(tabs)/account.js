@@ -8,6 +8,7 @@ import Button from '@/components/Button';
 import Card from '@/components/Card';
 import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
+import LoginPanel from '@/components/LoginPanel';
 import MenuRow from '@/components/MenuRow';
 import Photo from '@/components/Photo';
 import { dateTime } from '@/utils/format';
@@ -16,7 +17,16 @@ import { AUTH_MODE } from '@/utils/config';
 import { useFocusRefresh, usePullRefresh } from '@/utils/useRefresh';
 import { colors, space } from '@/utils/theme';
 
+// Chưa đăng nhập: hiện lời mời đăng nhập / tạo tài khoản. Đã đăng nhập: tên + email lấy từ GET /api/me
 export default function Account() {
+  const { status } = useAuth();
+  if (status !== 'authenticated') {
+    return <LoginPanel title="Đăng nhập để quản lý tài khoản" message="Đăng nhập hoặc tạo tài khoản để xem thông tin cá nhân, sổ địa chỉ và đơn hàng." />;
+  }
+  return <AccountScreen />;
+}
+
+function AccountScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { signOut } = useAuth();
