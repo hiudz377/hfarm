@@ -4,11 +4,25 @@ const { httpError } = require('../utils');
 
 const DEV_ROLES = ['admin', 'staff', 'customer'];
 
+// Bỏ dấu "/" thừa ở cuối để issuer khớp chính xác với claim "iss" của Keycloak
+const issuerUrl = () => `${String(process.env.KEYCLOAK_URL).replace(/\/+$/, '')}/realms/${process.env.KEYCLOAK_REALM}`;
+
+// Gọi lúc khởi động: thiếu cấu hình thì dừng ngay với thông báo rõ ràng, thay vì để mọi request
+// bị trả 401 "Token không hợp lệ" mà không biết nguyên nhân.
+function assertAuthConfig() {
+  if (process.env.AUTH_ENABLED !== 'true') return;
+  const missing = ['KEYCLOAK_URL', 'KEYCLOAK_REALM'].filter((k) => !String(process.env[k] || '').trim());
+  if (missing.length) throw new Error(`AUTH_ENABLED=true nhưng thiếu biến môi trường: ${missing.join(', ')}`);
+}
+
 let JWKS;
-const getJwks = () =>
-  (JWKS ||= createRemoteJWKSet(
-    new URL(`${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}/protocol/openid-connect/certs`)
-  ));
+const getJwks = () => (JWKS ||= createRemoteJWKSet(new URL(`${issuerUrl()}/protocol/openid-connect/certs`)));
+
+// Lỗi do chính token (hết hạn, sai chữ ký, sai issuer, sai định dạng...) -> 401.
+// Lỗi còn lại (Keycloak không truy cập được, JWKS hỏng) không phải lỗi của người dùng -> 503,
+// để web không tưởng nhầm là hết phiên rồi chuyển sang đăng nhập lại liên tục.
+const isTokenError = (e) =>
+  /^ERR_(JWT_|JWS_|JOSE_ALG_NOT_ALLOWED|JOSE_NOT_SUPPORTED|JWKS_NO_MATCHING_KEY)/.test(String(e?.code));
 
 // Đồng bộ tài khoản Keycloak sang bảng users, trả về id nội bộ
 async function syncUser({ sub, email, name, roles }) {
@@ -23,13 +37,15 @@ async function syncUser({ sub, email, name, roles }) {
         [sub, email || `${sub}@no-email.local`, name || null, userType]
       );
     } catch (e) {
-      if (e.code !== 'ER_DUP_ENTRY') throw e; // 2 request cùng lúc: bỏ qua
+      if (e.code !== 'ER_DUP_ENTRY') throw e;
     }
+    // Trùng keycloak_id = 2 request cùng lúc đã tạo giúp: dùng luôn. Nếu vẫn không thấy thì email
+    // đã thuộc về một tài khoản khác (uq_users_email); không tự gộp vì email Keycloak có thể chưa xác minh.
     user = await find();
+    if (!user) throw httpError(409, 'Email của tài khoản này đã được dùng bởi một tài khoản khác trong hệ thống');
   } else {
     await db.query('UPDATE users SET user_type = ? WHERE id = ?', [userType, user.id]);
   }
-  if (!user) throw httpError(500, 'Không tạo được tài khoản');
   if (user.status !== 'ACTIVE') throw httpError(403, 'Tài khoản đã bị khóa');
   return user.id;
 }
@@ -56,10 +72,11 @@ async function authenticate(req, res, next) {
       if (!token) throw httpError(401, 'Chưa đăng nhập');
       let payload;
       try {
-        const issuer = `${process.env.KEYCLOAK_URL}/realms/${process.env.KEYCLOAK_REALM}`;
-        ({ payload } = await jwtVerify(token, getJwks(), { issuer }));
-      } catch {
-        throw httpError(401, 'Token không hợp lệ hoặc đã hết hạn');
+        ({ payload } = await jwtVerify(token, getJwks(), { issuer: issuerUrl() }));
+      } catch (e) {
+        if (isTokenError(e)) throw httpError(401, 'Token không hợp lệ hoặc đã hết hạn');
+        console.error('Không xác thực được token với Keycloak:', e.message);
+        throw httpError(503, 'Không kết nối được máy chủ xác thực (Keycloak)');
       }
       claims = {
         sub: payload.sub,
@@ -79,4 +96,4 @@ async function authenticate(req, res, next) {
 const requireRole = (...roles) => (req, res, next) =>
   req.user.roles.some((r) => roles.includes(r)) ? next() : next(httpError(403, 'Không đủ quyền'));
 
-module.exports = { authenticate, requireRole };
+module.exports = { authenticate, requireRole, assertAuthConfig };

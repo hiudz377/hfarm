@@ -3,10 +3,31 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { authenticate, requireRole } = require('./src/middleware/auth');
+const { authenticate, requireRole, assertAuthConfig } = require('./src/middleware/auth');
+
+try {
+  assertAuthConfig();
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+}
+
+// CORS_ORIGIN: danh sách origin được phép, cách nhau dấu phẩy (ví dụ http://localhost:5173).
+// Bật xác thực mà không đặt CORS_ORIGIN -> chỉ cho http://localhost:5173 (web CMS).
+// Chế độ dev (AUTH_ENABLED=false) không đặt CORS_ORIGIN -> cho mọi origin như trước.
+const authEnabled = process.env.AUTH_ENABLED === 'true';
+const corsOrigins = (process.env.CORS_ORIGIN || (authEnabled ? 'http://localhost:5173' : ''))
+  .split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean);
 
 const app = express();
-app.use(cors());
+app.use(corsOrigins.length
+  ? cors({
+    origin: corsOrigins,
+    // Không liệt kê X-Dev-Role: header dev không có tác dụng khi bật xác thực
+    allowedHeaders: ['Authorization', 'Content-Type', ...(authEnabled ? [] : ['X-Dev-Role'])],
+    maxAge: 600, // mỗi request kèm Authorization đều cần preflight: cho trình duyệt nhớ 10 phút
+  })
+  : cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

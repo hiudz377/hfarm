@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AdminLayout from './layouts/AdminLayout.jsx';
+import AdminOnly from './auth/AdminOnly.jsx';
 
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
 const Products = lazy(() => import('./pages/Products.jsx'));
@@ -33,16 +34,17 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/products" element={<Products />} />
         <Route path="/inventory" element={<Inventory />} />
-        <Route path="/attributes" element={<Attributes />} />
-        <Route path="/coupons" element={<Coupons />} />
+        {/* Chỉ admin: Size & Màu, Mã giảm giá, Danh mục, Thương hiệu, Khách hàng (khớp requireRole('admin') ở backend) */}
+        <Route path="/attributes" element={<AdminOnly><Attributes /></AdminOnly>} />
+        <Route path="/coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
         <Route path="/categories"
-          element={<CrudPage title="Danh mục" endpoint="/admin/categories" fields={categoryFields}
-            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Slug', dataIndex: 'slug' }]} />} />
+          element={<AdminOnly><CrudPage title="Danh mục" endpoint="/admin/categories" fields={categoryFields}
+            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Slug', dataIndex: 'slug' }]} /></AdminOnly>} />
         <Route path="/brands"
-          element={<CrudPage title="Thương hiệu" endpoint="/admin/brands" fields={brandFields}
-            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Mô tả', dataIndex: 'description' }]} />} />
+          element={<AdminOnly><CrudPage title="Thương hiệu" endpoint="/admin/brands" fields={brandFields}
+            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Mô tả', dataIndex: 'description' }]} /></AdminOnly>} />
         <Route path="/orders" element={<Orders />} />
-        <Route path="/customers" element={<Customers />} />
+        <Route path="/customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

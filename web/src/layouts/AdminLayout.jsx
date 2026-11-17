@@ -1,25 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Suspense } from 'react';
-import { App, Avatar, Badge, Breadcrumb, Layout, Menu, Skeleton, Space, Typography } from 'antd';
+import { App, Avatar, Badge, Breadcrumb, Dropdown, Layout, Menu, Skeleton, Typography } from 'antd';
 import {
-  AppstoreOutlined, DashboardOutlined, GiftOutlined, InboxOutlined, SkinOutlined,
-  ShoppingCartOutlined, TagsOutlined, TeamOutlined,
+  AppstoreOutlined, DashboardOutlined, DownOutlined, GiftOutlined, InboxOutlined, LogoutOutlined,
+  SkinOutlined, ShoppingCartOutlined, TagsOutlined, TeamOutlined, UserOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api';
+import { useAuth } from '../auth/AuthProvider.jsx';
 
+// adminOnly: staff không thấy mục này (backend cũng chặn bằng requireRole('admin'))
 const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Tổng quan' },
   { type: 'group', label: 'Bán hàng', children: [
     { key: '/orders', icon: <ShoppingCartOutlined />, label: 'Đơn hàng' },
-    { key: '/customers', icon: <TeamOutlined />, label: 'Khách hàng' },
-    { key: '/coupons', icon: <GiftOutlined />, label: 'Mã giảm giá' },
+    { key: '/customers', icon: <TeamOutlined />, label: 'Khách hàng', adminOnly: true },
+    { key: '/coupons', icon: <GiftOutlined />, label: 'Mã giảm giá', adminOnly: true },
   ] },
   { type: 'group', label: 'Sản phẩm', children: [
     { key: '/products', icon: <SkinOutlined />, label: 'Sản phẩm' },
-    { key: '/categories', icon: <AppstoreOutlined />, label: 'Danh mục' },
-    { key: '/brands', icon: <TagsOutlined />, label: 'Thương hiệu' },
-    { key: '/attributes', icon: <TagsOutlined />, label: 'Size & Màu' },
+    { key: '/categories', icon: <AppstoreOutlined />, label: 'Danh mục', adminOnly: true },
+    { key: '/brands', icon: <TagsOutlined />, label: 'Thương hiệu', adminOnly: true },
+    { key: '/attributes', icon: <TagsOutlined />, label: 'Size & Màu', adminOnly: true },
   ] },
   { type: 'group', label: 'Vận hành', children: [
     { key: '/inventory', icon: <InboxOutlined />, label: 'Kho hàng' },
@@ -50,6 +52,7 @@ function BrandMark() {
 
 export default function AdminLayout() {
   const { message } = App.useApp();
+  const { user, isAdmin, roleLabel, logout, accountUrl } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [pendingOrders, setPendingOrders] = useState(0);
@@ -74,13 +77,30 @@ export default function AdminLayout() {
     };
   }, [pathname]);
 
-  const items = useMemo(() => menuItems.map((item) => ({
-    ...item,
-    children: item.children?.map((child) => child.key === '/orders' ? {
-      ...child,
-      label: <span className="menu-order-label">Đơn hàng<Badge count={pendingOrders} overflowCount={99} size="small" /></span>,
-    } : child),
-  })), [pendingOrders]);
+  const items = useMemo(() => menuItems
+    .map((item) => ({
+      ...item,
+      children: item.children
+        ?.filter((child) => isAdmin || !child.adminOnly)
+        .map(({ adminOnly, ...child }) => child.key === '/orders' ? {
+          ...child,
+          label: <span className="menu-order-label">Đơn hàng<Badge count={pendingOrders} overflowCount={99} size="small" /></span>,
+        } : child),
+    }))
+    .filter((item) => !item.children || item.children.length > 0), // bỏ nhóm không còn mục nào
+  [pendingOrders, isAdmin]);
+
+  const userMenu = {
+    items: [
+      ...(accountUrl ? [{
+        key: 'account',
+        icon: <UserOutlined />,
+        label: <a href={accountUrl} target="_blank" rel="noopener noreferrer">Quản lý tài khoản</a>,
+      }, { type: 'divider' }] : []),
+      { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', danger: true },
+    ],
+    onClick: ({ key }) => { if (key === 'logout') logout(); },
+  };
 
   return (
     <Layout className="admin-layout" style={{ minHeight: '100vh' }}>
@@ -104,10 +124,18 @@ export default function AdminLayout() {
       <Layout className="admin-main">
         <Layout.Header className="admin-header">
           <Breadcrumb items={[{ title: 'HFarm' }, { title }]} />
-          <Space size={10}>
-            <Avatar size="small" style={{ background: '#e8f5e9', color: '#2e7d32' }}>Q</Avatar>
-            <Typography.Text>Quản trị viên</Typography.Text>
-          </Space>
+          <Dropdown menu={userMenu} trigger={['click']} placement="bottomRight">
+            <button type="button" className="header-user" aria-label="Menu tài khoản">
+              <Avatar size="small" style={{ background: '#e8f5e9', color: '#2e7d32' }}>
+                {user.name.trim().charAt(0).toUpperCase() || <UserOutlined />}
+              </Avatar>
+              <span className="header-user-text">
+                <Typography.Text strong className="header-user-name">{user.name}</Typography.Text>
+                <Typography.Text type="secondary" className="header-user-role">{roleLabel}</Typography.Text>
+              </span>
+              <DownOutlined className="header-user-caret" />
+            </button>
+          </Dropdown>
         </Layout.Header>
         <Layout.Content className="admin-content">
           <Suspense fallback={<Skeleton active paragraph={{ rows: 5 }} />}>
