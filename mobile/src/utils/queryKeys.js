@@ -1,0 +1,10 @@
+// Khóa React Query dùng chung toàn app. Mọi nơi đọc/ghi/invalidate dữ liệu đều lấy khóa từ đây
+// để các màn (badge, giỏ, thanh toán, đơn hàng, tài khoản) luôn khớp nhau.
+export const CART_KEY = ['cart'];
+export const QUOTE_KEY = ['quote']; // ['quote', chữ ký giỏ, mã giảm giá]
+export const ADDRESSES_KEY = ['addresses'];
+export const ME_KEY = ['me'];
+export const ORDERS_KEY = ['orders']; // ['orders', { status }] (danh sách, phân trang)
+export const orderKey = (id) => ['order', String(id)]; // chi tiết 1 đơn
+export const PRODUCTS_KEY = ['products'];
+export const PRODUCT_KEY = ['product']; // ['product', id]
