@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, FlatList, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
@@ -10,9 +11,13 @@ import { fetchProduct } from '@/api/products';
 import Button from '@/components/Button';
 import Chip from '@/components/Chip';
 import EmptyState from '@/components/EmptyState';
+import FavoriteButton from '@/components/FavoriteButton';
 import Loading from '@/components/Loading';
 import Photo from '@/components/Photo';
 import QuantityStepper from '@/components/QuantityStepper';
+import RelatedProducts from '@/components/RelatedProducts';
+import ReviewSection from '@/components/ReviewSection';
+import Stars from '@/components/Stars';
 import { money } from '@/utils/format';
 import { goBack, goToTab } from '@/utils/nav';
 import { CART_KEY, useCart } from '@/utils/useCart';
@@ -31,6 +36,13 @@ const uniq = (list, key, map) => {
   return out;
 };
 
+const InfoRow = ({ label, value, last }) => (
+  <View style={[styles.infoRow, !last && styles.infoBorder]}>
+    <Text style={styles.infoLabel}>{label}</Text>
+    <Text style={styles.infoValue}>{value}</Text>
+  </View>
+);
+
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -48,6 +60,8 @@ export default function ProductDetail() {
   const [pickedSize, setPickedSize] = useState(null);
   const [qty, setQty] = useState(1);
   const [page, setPage] = useState(0);
+  const [descOpen, setDescOpen] = useState(false);
+  const gallery = useRef(null);
 
   // Giỏ hiện tại (cùng cache với tab Giỏ hàng): để biết trong giỏ đã có bao nhiêu của biến thể này
   const { data: cart } = useCart();
@@ -109,7 +123,19 @@ export default function ProductDetail() {
     : prices.length && Math.min(...prices) !== Math.max(...prices)
       ? `${money(Math.min(...prices))} - ${money(Math.max(...prices))}`
       : money(prices.length ? prices[0] : product.base_price);
-  const comparePrice = variant && variant.compare_at_price > variant.price ? variant.compare_at_price : null;
+  // Giá gạch ngang + nhãn giảm giá chỉ hiện khi biết rõ đang nói về phiên bản nào: đã chọn phiên bản, hoặc mọi phiên bản cùng một giá.
+  // (Chưa chọn mà giá là một khoảng thì không hiện, tránh nhãn giảm giá đi kèm khoảng giá gây hiểu nhầm.)
+  const uniformPrice = prices.length > 0 && Math.min(...prices) === Math.max(...prices);
+  const refVariant = variant ?? (uniformPrice ? variants[0] : null);
+  const comparePrice = refVariant && refVariant.compare_at_price > refVariant.price ? refVariant.compare_at_price : null;
+  const discount = comparePrice ? Math.round((1 - refVariant.price / comparePrice) * 100) : 0;
+  const onShare = async () => {
+    try {
+      await Share.share({ message: `${product.name} - ${priceText}` });
+    } catch {
+      // người dùng đóng hộp chia sẻ hoặc thiết bị không hỗ trợ: bỏ qua
+    }
+  };
 
   let cta = 'Thêm vào giỏ';
   if (!variants.length) cta = 'Chưa mở bán';
@@ -129,14 +155,27 @@ export default function ProductDetail() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View>
           <FlatList
+            ref={gallery}
             data={pics}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             keyExtractor={(_, i) => String(i)}
+            getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
             renderItem={({ item }) => <Photo uri={item} style={{ width, height: imgHeight }} />}
             onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
           />
+          <View style={styles.actions}>
+            <Pressable onPress={onShare} hitSlop={8} role="button" aria-label="Chia sẻ sản phẩm" style={styles.circle}>
+              <Ionicons name="share-social-outline" size={19} color={colors.text} />
+            </Pressable>
+            <FavoriteButton productId={product.id} size={20} />
+          </View>
+          {discount > 0 ? (
+            <View style={styles.discount}>
+              <Text style={styles.discountText}>-{discount}%</Text>
+            </View>
+          ) : null}
           {pics.length > 1 ? (
             <View style={styles.counter}>
               <Text style={styles.counterText}>{page + 1}/{pics.length}</Text>
@@ -144,9 +183,43 @@ export default function ProductDetail() {
           ) : null}
         </View>
 
+        {pics.length > 1 ? (
+          <FlatList
+            data={pics}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(_, i) => String(i)}
+            contentContainerStyle={styles.thumbs}
+            renderItem={({ item, index }) => (
+              <Pressable
+                onPress={() => {
+                  gallery.current?.scrollToIndex({ index, animated: true });
+                  setPage(index);
+                }}
+                role="button"
+                aria-label={`Xem ảnh ${index + 1}`}
+                style={[styles.thumbWrap, index === page && styles.thumbOn]}
+              >
+                <Photo uri={item} style={styles.thumb} />
+              </Pressable>
+            )}
+          />
+        ) : null}
+
         <View style={styles.section}>
           <Text style={styles.name}>{product.name}</Text>
           <Text style={styles.meta}>{[product.brand_name, product.category_name].filter(Boolean).join(' · ')}</Text>
+          <View style={styles.ratingRow}>
+            {Number(product.rating_count) > 0 ? (
+              <>
+                <Stars value={Number(product.rating_avg)} size={15} />
+                <Text style={styles.ratingText}>{Number(product.rating_avg).toFixed(1)} ({product.rating_count} đánh giá)</Text>
+              </>
+            ) : (
+              <Text style={styles.ratingText}>Chưa có đánh giá</Text>
+            )}
+            {Number(product.sold_count) > 0 ? <Text style={styles.ratingText}>· Đã bán {product.sold_count}</Text> : null}
+          </View>
           <View style={styles.priceRow}>
             <Text style={styles.price}>{priceText}</Text>
             {comparePrice ? <Text style={styles.compare}>{money(comparePrice)}</Text> : null}
@@ -181,12 +254,34 @@ export default function ProductDetail() {
           </Text>
         ) : null}
 
+        <View style={styles.section}>
+          <Text style={styles.label}>Thông tin sản phẩm</Text>
+          <View style={styles.infoBox}>
+            <InfoRow label="Danh mục" value={product.category_name} />
+            {product.brand_name ? <InfoRow label="Thương hiệu" value={product.brand_name} /> : null}
+            <InfoRow label="Mã SKU" value={variant ? variant.sku : 'Chọn màu và size để xem'} />
+            <InfoRow
+              label="Tình trạng"
+              value={variant ? (stock > 0 ? `Còn ${stock} sản phẩm` : 'Hết hàng') : variants.some((v) => Number(v.stock) > 0) ? 'Còn hàng' : 'Hết hàng'}
+              last
+            />
+          </View>
+        </View>
+
         {product.description ? (
           <View style={styles.section}>
             <Text style={styles.label}>Mô tả</Text>
-            <Text style={styles.desc}>{product.description}</Text>
+            <Text style={styles.desc} numberOfLines={descOpen ? undefined : 5}>{product.description}</Text>
+            {product.description.length > 200 ? (
+              <Pressable onPress={() => setDescOpen((v) => !v)} hitSlop={8} role="button">
+                <Text style={styles.more}>{descOpen ? 'Thu gọn' : 'Xem thêm'}</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
+
+        <ReviewSection productId={product.id} />
+        <RelatedProducts productId={product.id} />
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
@@ -218,6 +313,22 @@ export default function ProductDetail() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingBottom: space.xl },
+  actions: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', gap: 8 },
+  circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.92)' },
+  discount: { position: 'absolute', top: 12, left: 12, backgroundColor: colors.danger, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  discountText: { color: colors.white, fontSize: 13, fontWeight: '700' },
+  thumbs: { paddingHorizontal: space.lg, paddingTop: space.md, gap: 8 },
+  thumbWrap: { borderRadius: 8, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  thumbOn: { borderColor: colors.primary },
+  thumb: { width: 56, height: 70 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  ratingText: { fontSize: 13, color: colors.muted },
+  infoBox: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md, padding: space.md },
+  infoBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  infoLabel: { fontSize: 14, color: colors.muted },
+  infoValue: { fontSize: 14, color: colors.text, flexShrink: 1, textAlign: 'right' },
+  more: { fontSize: 14, color: colors.primary, fontWeight: '600' },
   counter: { position: 'absolute', right: 12, bottom: 12, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   counterText: { color: colors.white, fontSize: 12 },
   section: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: 8 },

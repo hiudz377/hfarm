@@ -1,5 +1,7 @@
 import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { Typography } from 'antd';
+import { PictureOutlined } from '@ant-design/icons';
 import AdminLayout from './layouts/AdminLayout.jsx';
 import AdminOnly from './auth/AdminOnly.jsx';
 
@@ -11,6 +13,7 @@ const CrudPage = lazy(() => import('./pages/CrudPage.jsx'));
 const Inventory = lazy(() => import('./pages/Inventory.jsx'));
 const Attributes = lazy(() => import('./pages/Attributes.jsx'));
 const Coupons = lazy(() => import('./pages/Coupons.jsx'));
+const Reviews = lazy(() => import('./pages/Reviews.jsx'));
 
 const categoryFields = (rows) => [
   { name: 'name', label: 'Tên danh mục', required: true },
@@ -39,11 +42,14 @@ export default function App() {
         <Route path="/coupons" element={<AdminOnly><Coupons /></AdminOnly>} />
         <Route path="/categories"
           element={<AdminOnly><CrudPage title="Danh mục" endpoint="/admin/categories" fields={categoryFields}
-            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Slug', dataIndex: 'slug' }]} /></AdminOnly>} />
+            deleteHint="Danh mục đang có sản phẩm thì không xóa được, hãy chuyển sang ngừng hoạt động."
+            columns={[{ title: 'Danh mục', dataIndex: 'name', render: (name, r) => (<div><Typography.Text strong>{name}</Typography.Text><div className="cell-sub">/{r.slug}</div></div>) }, { title: 'Mô tả', dataIndex: 'description', render: (d) => d || <span className="muted-dash">—</span> }]} /></AdminOnly>} />
         <Route path="/brands"
           element={<AdminOnly><CrudPage title="Thương hiệu" endpoint="/admin/brands" fields={brandFields}
-            columns={[{ title: 'Tên', dataIndex: 'name' }, { title: 'Mô tả', dataIndex: 'description' }]} /></AdminOnly>} />
+            deleteHint="Sản phẩm thuộc thương hiệu này sẽ không còn thương hiệu."
+            columns={[{ title: 'Thương hiệu', dataIndex: 'name', render: (name, r) => (<div className="review-product">{r.logo_url ? <img className="review-thumb" style={{ width: 40, height: 40, objectFit: 'contain' }} src={r.logo_url} alt="" /> : <div className="review-thumb review-thumb-empty" style={{ width: 40, height: 40 }}><PictureOutlined /></div>}<Typography.Text strong>{name}</Typography.Text></div>) }, { title: 'Mô tả', dataIndex: 'description', render: (d) => d || <span className="muted-dash">—</span> }]} /></AdminOnly>} />
         <Route path="/orders" element={<Orders />} />
+        <Route path="/reviews" element={<Reviews />} />
         <Route path="/customers" element={<AdminOnly><Customers /></AdminOnly>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

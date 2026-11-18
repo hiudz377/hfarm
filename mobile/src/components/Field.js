@@ -2,17 +2,20 @@ import { forwardRef } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius } from '@/utils/theme';
 
-// Ô nhập có nhãn + thông báo lỗi bên dưới
-const Field = forwardRef(function Field({ label, error, style, ...inputProps }, ref) {
+// Ô nhập có nhãn + thông báo lỗi bên dưới. `right`: nút nhỏ đặt bên phải trong ô (ví dụ hiện/ẩn mật khẩu).
+const Field = forwardRef(function Field({ label, error, style, right, ...inputProps }, ref) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
-        ref={ref}
-        placeholderTextColor={colors.muted}
-        {...inputProps}
-        style={[styles.input, !!error && styles.inputError, style]}
-      />
+      <View>
+        <TextInput
+          ref={ref}
+          placeholderTextColor={colors.muted}
+          {...inputProps}
+          style={[styles.input, !!error && styles.inputError, !!right && styles.inputWithRight, style]}
+        />
+        {right ? <View style={styles.right}>{right}</View> : null}
+      </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </View>
   );
@@ -34,6 +37,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
   },
+  inputWithRight: { paddingRight: 46 },
   inputError: { borderColor: colors.danger },
+  right: { position: 'absolute', right: 6, top: 0, bottom: 0, justifyContent: 'center' },
   error: { fontSize: 12, color: colors.danger },
 });

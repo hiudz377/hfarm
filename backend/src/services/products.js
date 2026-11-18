@@ -1,5 +1,6 @@
 const db = require('../db');
 const { paging, httpError } = require('../utils');
+const { groupSizes } = require('./sizes');
 
 // Giá hiển thị/lọc/sắp xếp của một sản phẩm = giá thấp nhất trong các biến thể đang bán (không có thì lấy giá gốc)
 const PRICE = '(COALESCE((SELECT MIN(price) FROM product_variants WHERE product_id = p.id AND is_active = 1), p.base_price))';
@@ -7,6 +8,25 @@ const PRICE = '(COALESCE((SELECT MIN(price) FROM product_variants WHERE product_
 const SOLD = `(SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi
    JOIN orders o ON o.id = oi.order_id JOIN product_variants pv ON pv.id = oi.variant_id
    WHERE pv.product_id = p.id AND o.status NOT IN ('CANCELLED', 'RETURNED'))`;
+const STOCK = `(SELECT COALESCE(SUM(i.quantity), 0) FROM product_variants v
+   JOIN inventories i ON i.variant_id = v.id WHERE v.product_id = p.id)`;
+// Điểm đánh giá trung bình và số lượt (chỉ tính đánh giá đã được duyệt)
+const RATING_AVG = "(SELECT ROUND(AVG(rt.rating), 1) FROM reviews rt WHERE rt.product_id = p.id AND rt.status = 'APPROVED')";
+const RATING_COUNT = "(SELECT COUNT(*) FROM reviews rt WHERE rt.product_id = p.id AND rt.status = 'APPROVED')";
+
+// Cột dùng chung cho mọi danh sách sản phẩm (cửa hàng, yêu thích, liên quan)
+const LIST_COLUMNS = `p.id, p.name, p.slug, p.base_price, p.status, p.category_id, p.brand_id, p.created_at,
+       c.name AS category_name, b.name AS brand_name,
+       (SELECT MIN(price) FROM product_variants WHERE product_id = p.id AND is_active = 1) AS min_price,
+       (SELECT v.compare_at_price FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1
+          ORDER BY v.price, v.id LIMIT 1) AS compare_at_price,
+       ${STOCK} AS total_stock,
+       (SELECT image_url FROM product_images WHERE product_id = p.id
+          ORDER BY is_primary DESC, sort_order, id LIMIT 1) AS thumbnail,
+       ${RATING_AVG} AS rating_avg, ${RATING_COUNT} AS rating_count`;
+const LIST_FROM = `FROM products p
+     JOIN categories c ON c.id = p.category_id
+     LEFT JOIN brands b ON b.id = p.brand_id`;
 
 // ?sort= : chỉ nhận các giá trị trong danh sách này (không bao giờ ghép chuỗi người dùng vào SQL). p.id DESC để thứ tự ổn định khi phân trang.
 const SORTS = {
@@ -69,40 +89,75 @@ async function listProducts(q, onlyActive) {
 
   const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total FROM products p ${w}`, params);
   const [rows] = await db.query(
-    `SELECT p.id, p.name, p.slug, p.base_price, p.status, p.category_id, p.brand_id, p.created_at,
-       c.name AS category_name, b.name AS brand_name,
-       (SELECT MIN(price) FROM product_variants WHERE product_id = p.id AND is_active = 1) AS min_price,
-       (SELECT COALESCE(SUM(i.quantity), 0) FROM product_variants v
-          JOIN inventories i ON i.variant_id = v.id WHERE v.product_id = p.id) AS total_stock,
-       (SELECT image_url FROM product_images WHERE product_id = p.id
-          ORDER BY is_primary DESC, sort_order, id LIMIT 1) AS thumbnail
-     FROM products p
-     JOIN categories c ON c.id = p.category_id
-     LEFT JOIN brands b ON b.id = p.brand_id
-     ${w} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`,
+    `SELECT ${LIST_COLUMNS} ${LIST_FROM} ${w} ORDER BY ${SORTS[sort]} LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   return { data: rows, page, limit, total };
 }
 
+// Gợi ý khi gõ ô tìm kiếm: sản phẩm đang bán có tên chứa chữ vừa gõ. Xếp: tên bắt đầu bằng chữ đó, rồi một từ bắt đầu bằng chữ đó,
+// rồi chứa ở giữa. Không phân biệt hoa/thường và dấu ("ao" ra "Áo"). Ký tự % _ \ trong chữ gõ được coi là ký tự thường.
+async function suggestProducts(raw, limit = 8) {
+  const q = String(raw ?? '').trim().slice(0, 60);
+  if (!q) return [];
+  const esc = q.replace(/[\\%_]/g, '\\$&');
+  const [rows] = await db.query(
+    `SELECT p.id, p.name,
+            ${PRICE} AS price,
+            (SELECT image_url FROM product_images WHERE product_id = p.id
+               ORDER BY is_primary DESC, sort_order, id LIMIT 1) AS thumbnail
+     FROM products p
+     WHERE p.status = 'ACTIVE' AND p.name LIKE ?
+     ORDER BY CASE WHEN p.name LIKE ? THEN 0 WHEN p.name LIKE ? THEN 1 ELSE 2 END, p.name
+     LIMIT ?`,
+    [`%${esc}%`, `${esc}%`, `% ${esc}%`, limit]);
+  return rows;
+}
+
+// Sản phẩm liên quan: cùng danh mục (còn hàng, cùng thương hiệu, giá gần nhau trước); chưa đủ thì bổ sung sản phẩm bán chạy khác
+async function relatedProducts(id, limit = 8) {
+  const [[base]] = await db.query(
+    `SELECT p.category_id, p.brand_id, ${PRICE} AS price FROM products p WHERE p.id = ? AND p.status = 'ACTIVE'`, [id]);
+  if (!base) throw httpError(404, 'Không tìm thấy sản phẩm');
+  const [same] = await db.query(
+    `SELECT ${LIST_COLUMNS} ${LIST_FROM}
+     WHERE p.status = 'ACTIVE' AND p.id <> ? AND p.category_id = ?
+     ORDER BY (${STOCK} > 0) DESC, (p.brand_id <=> ?) DESC, ABS(${PRICE} - ?) ASC, p.id DESC LIMIT ?`,
+    [id, base.category_id, base.brand_id, base.price, limit]);
+  if (same.length >= limit) return same;
+  const exclude = [Number(id), ...same.map((r) => r.id)];
+  const [more] = await db.query(
+    `SELECT ${LIST_COLUMNS} ${LIST_FROM}
+     WHERE p.status = 'ACTIVE' AND p.id NOT IN (${marks(exclude)})
+     ORDER BY (${STOCK} > 0) DESC, ${SOLD} DESC, p.id DESC LIMIT ?`,
+    [...exclude, limit - same.length]);
+  return [...same, ...more];
+}
+
 async function getProduct(id, onlyActive) {
   const [rows] = await db.query(
-    `SELECT p.*, c.name AS category_name, b.name AS brand_name
+    `SELECT p.*, c.name AS category_name, b.name AS brand_name,
+            ${RATING_AVG} AS rating_avg, ${RATING_COUNT} AS rating_count, ${SOLD} AS sold_count
      FROM products p JOIN categories c ON c.id = p.category_id
      LEFT JOIN brands b ON b.id = p.brand_id
      WHERE p.id = ? ${onlyActive ? "AND p.status = 'ACTIVE'" : ''}`, [id]);
   if (!rows.length) throw httpError(404, 'Không tìm thấy sản phẩm');
   const [variants] = await db.query(
-    `SELECT v.*, s.name AS size_name, c.name AS color_name, c.hex_code,
+    `SELECT v.*, s.name AS size_name, s.sort_order AS size_sort, c.name AS color_name, c.hex_code,
             COALESCE(i.quantity, 0) AS stock
      FROM product_variants v
      JOIN sizes s ON s.id = v.size_id JOIN colors c ON c.id = v.color_id
      LEFT JOIN inventories i ON i.variant_id = v.id
      WHERE v.product_id = ? ${onlyActive ? 'AND v.is_active = 1' : ''}
      ORDER BY s.sort_order, c.id`, [id]);
+  // Sắp size theo nghĩa (chữ trước số, XS < S < M < L < XL, số tăng dần) thay vì sort_order: size thêm sau có sort_order = 0
+  const rank = new Map(groupSizes(
+    [...new Map(variants.map((v) => [v.size_id, { id: v.size_id, name: v.size_name, sort_order: v.size_sort }])).values()],
+  ).map((s, i) => [s.id, i]));
+  variants.sort((a, b) => rank.get(a.size_id) - rank.get(b.size_id) || a.color_id - b.color_id);
   const [images] = await db.query(
     'SELECT * FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, sort_order, id', [id]);
-  return { ...rows[0], variants, images };
+  return { ...rows[0], variants: variants.map(({ size_sort, ...v }) => v), images };
 }
 
-module.exports = { listProducts, getProduct };
+module.exports = { listProducts, getProduct, suggestProducts, relatedProducts, LIST_COLUMNS };

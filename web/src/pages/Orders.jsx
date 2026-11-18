@@ -1,29 +1,98 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  App, Button, Card, Descriptions, Drawer, Empty, Input, Segmented, Space, Table, Tag, Timeline,
-  Tooltip, Typography,
+  Alert, App, Button, Card, Collapse, Descriptions, Drawer, Dropdown, Empty, Input, Select, Space, Steps, Table,
+  Tabs, Tag, Timeline, Typography,
 } from 'antd';
-import { EyeOutlined, PrinterOutlined } from '@ant-design/icons';
+import {
+  CarOutlined, CheckCircleOutlined, CheckOutlined, CloseCircleOutlined, EllipsisOutlined, EyeOutlined,
+  PrinterOutlined, ReloadOutlined, RollbackOutlined,
+} from '@ant-design/icons';
 import api, { errMsg } from '../api';
-import { dateTime, money, NEXT_STATUS, ORDER_STATUS, PAYMENT_STATUS } from '../utils';
+import {
+  actionsOf, dangerTitle, dateTime, money, nextActionOf, NEXT_ACTIONS, ORDER_ACTIONS, ORDER_GROUPS, ORDER_STATUS,
+  orderTag, PAYMENT_METHOD, PAYMENT_STATUS,
+} from '../utils';
 import PageHeader from '../components/PageHeader.jsx';
 
+const ACTION_ICON = {
+  confirm: <CheckOutlined />, ship: <CarOutlined />, complete: <CheckCircleOutlined />,
+  cancel: <CloseCircleOutlined />, return: <RollbackOutlined />,
+};
+
+const shortDate = (d) => {
+  if (!d) return '';
+  const x = new Date(d);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(x.getDate())}/${p(x.getMonth() + 1)} ${p(x.getHours())}:${p(x.getMinutes())}`;
+};
+
+// Vị trí của đơn trên dòng tiến trình (Hủy / Hoàn trả nằm ngoài tiến trình)
+const STAGE = { PENDING: 0, CONFIRMED: 1, PROCESSING: 1, SHIPPING: 2, COMPLETED: 3 };
+
+function TabLabel({ text, count, urgent }) {
+  return (
+    <span>
+      {text}
+      <span className={`tab-count${urgent && count > 0 ? ' urgent' : ''}`}>{count > 999 ? '999+' : count}</span>
+    </span>
+  );
+}
+
 export default function Orders() {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const [data, setData] = useState({ data: [], total: 0 });
+  const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ status: '', q: '', page: 1, limit: 10 });
+  const [filters, setFilters] = useState({ group: 'ALL', q: '', payment: '', page: 1, limit: 20 });
+  const [selectedKeys, setSelectedKeys] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [busyId, setBusyId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [note, setNote] = useState('');
   const [ship, setShip] = useState({ carrier: '', tracking_code: '' });
+  const seq = useRef(0);
 
-  const load = async () => {
-    setLoading(true);
-    try { setData((await api.get('/admin/orders', { params: filters })).data); }
-    catch (e) { message.error(errMsg(e)); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { load(); }, [filters]);
+  const params = useMemo(() => {
+    const group = ORDER_GROUPS.find((g) => g.key === filters.group);
+    return {
+      status: group ? group.statuses.join(',') : undefined,
+      payment_status: filters.payment || undefined,
+      q: filters.q || undefined,
+      page: filters.page,
+      limit: filters.limit,
+    };
+  }, [filters]);
+
+  // silent = làm mới ngầm (tự động mỗi 30 giây): không hiện vòng quay, không báo lỗi
+  const load = useCallback(async (silent = false) => {
+    const mine = ++seq.current;
+    if (!silent) setLoading(true);
+    try {
+      const [list, c] = await Promise.all([api.get('/admin/orders', { params }), api.get('/admin/orders/counts')]);
+      if (mine !== seq.current) return; // đã có yêu cầu mới hơn (đổi tab nhanh)
+      setData(list.data);
+      setCounts(c.data);
+    } catch (e) {
+      if (!silent && mine === seq.current) message.error(errMsg(e));
+    } finally {
+      if (!silent && mine === seq.current) setLoading(false);
+    }
+  }, [params, message]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  useEffect(() => {
+    const timer = setInterval(() => { if (!document.hidden) loadRef.current(true); }, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const update = (patch) => { setFilters((f) => ({ ...f, page: 1, ...patch })); setSelectedKeys([]); };
+  const groupCount = (g) => (counts ? g.statuses.reduce((sum, s) => sum + (counts[s] || 0), 0) : 0);
+  const totalCount = counts ? Object.values(counts).reduce((a, b) => a + b, 0) : 0;
+
+  const selectedRows = data.data.filter((r) => selectedKeys.includes(r.id));
 
   const openDetail = async (id) => {
     try {
@@ -33,15 +102,79 @@ export default function Orders() {
     } catch (e) { message.error(errMsg(e)); }
   };
 
-  const changeStatus = async (status) => {
+  // Một đường duy nhất cho mọi thao tác (nút trên dòng, thanh chọn nhiều, trong ngăn chi tiết): POST /admin/orders/bulk
+  const runAction = async (action, ids, extra = {}) => {
+    const def = ORDER_ACTIONS[action];
+    setBusy(true);
+    if (ids.length === 1) setBusyId(ids[0]);
     try {
-      const res = await api.patch(`/admin/orders/${detail.id}/status`, { status, note, ...ship });
-      setDetail(res.data);
-      setNote('');
-      message.success('Đã cập nhật trạng thái');
+      const { data: res } = await api.post('/admin/orders/bulk', { ids, action, ...extra });
+      const failed = res.results.filter((r) => !r.ok);
+      if (!failed.length) {
+        const tracking = res.results.length === 1 ? res.results[0].tracking_code : null;
+        message.success(res.results.length === 1
+          ? `${def.done}${tracking ? ` · Mã vận đơn ${tracking}` : ''}`
+          : `${def.done} ${res.succeeded} đơn`);
+      } else if (res.results.length === 1) {
+        message.error(failed[0].error);
+      } else {
+        modal.warning({
+          title: `${def.done} ${res.succeeded}/${res.results.length} đơn`,
+          width: 560,
+          content: (
+            <div>
+              <div style={{ marginBottom: 8 }}>{failed.length} đơn không xử lý được:</div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {failed.map((f) => <li key={f.id}><b>{f.order_code || `#${f.id}`}</b>: {f.error}</li>)}
+              </ul>
+            </div>
+          ),
+        });
+      }
+      setSelectedKeys([]);
       window.dispatchEvent(new Event('hfarm:orders-updated'));
-      load();
-    } catch (e) { message.error(errMsg(e)); }
+      await load(true);
+      if (detail && ids.includes(detail.id)) setDetail((await api.get(`/admin/orders/${detail.id}`)).data);
+      return res;
+    } catch (e) {
+      message.error(errMsg(e));
+      return null;
+    } finally {
+      setBusy(false);
+      setBusyId(null);
+    }
+  };
+
+  // Hủy / hoàn trả luôn hỏi lại vì không hoàn tác được (có hoàn kho)
+  const confirmDanger = (action, ids, label) => {
+    const def = ORDER_ACTIONS[action];
+    modal.confirm({
+      title: dangerTitle(action, ids, label),
+      content: 'Số lượng hàng của đơn sẽ được cộng lại vào kho. Thao tác này không hoàn tác được.',
+      okText: def.label,
+      cancelText: 'Không',
+      okButtonProps: { danger: true },
+      onOk: () => runAction(action, ids),
+    });
+  };
+
+  const applyBulk = (action) => {
+    const ids = selectedRows.filter((r) => ORDER_ACTIONS[action].from.includes(r.status)).map((r) => r.id);
+    if (!ids.length) return;
+    if (ORDER_ACTIONS[action].danger) { confirmDanger(action, ids); return; }
+    if (ids.length > 1 && (action === 'ship' || action === 'complete')) {
+      modal.confirm({
+        title: `${ORDER_ACTIONS[action].label} ${ids.length} đơn?`,
+        content: action === 'ship'
+          ? 'Hệ thống tự tạo mã vận đơn cho từng đơn và dùng đơn vị vận chuyển mặc định.'
+          : 'Các đơn sẽ chuyển sang Hoàn tất; đơn chưa thanh toán được ghi nhận là đã thanh toán.',
+        okText: ORDER_ACTIONS[action].label,
+        cancelText: 'Không',
+        onOk: () => runAction(action, ids),
+      });
+      return;
+    }
+    runAction(action, ids);
   };
 
   const printDeliverySlip = () => {
@@ -65,6 +198,9 @@ export default function Orders() {
     const amountDue = detail.payment_status === 'PAID'
       ? '<strong>Đã thanh toán</strong>'
       : `<strong>${escapeHtml(money(detail.total_amount))}</strong>`;
+    const tracking = detail.shipment?.tracking_code
+      ? `<div class="section"><strong>Mã vận đơn:</strong> ${escapeHtml(detail.shipment.tracking_code)}${detail.shipment.carrier ? ` · ${escapeHtml(detail.shipment.carrier)}` : ''}</div>`
+      : '';
 
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
@@ -83,6 +219,7 @@ export default function Orders() {
       </style></head><body>
         <h1>Phiếu giao hàng</h1>
         <div class="muted">HFarm · Đơn ${escapeHtml(detail.order_code)}</div>
+        ${tracking}
         <div class="section"><strong>Người nhận:</strong> ${escapeHtml(detail.recipient_name)} · ${escapeHtml(detail.recipient_phone)}<br>
         <strong>Địa chỉ:</strong> ${address}</div>
         <table><thead><tr><th>Sản phẩm</th><th>SKU</th><th class="number">SL</th><th class="number">Thành tiền</th></tr></thead>
@@ -93,64 +230,237 @@ export default function Orders() {
     printWindow.document.close();
   };
 
-  const next = detail ? NEXT_STATUS[detail.status] : [];
+  const bulkButtons = [...NEXT_ACTIONS, 'cancel'].map((action) => ({
+    action,
+    count: selectedRows.filter((r) => ORDER_ACTIONS[action].from.includes(r.status)).length,
+  })).filter((b) => b.count > 0);
+
+  const columns = [
+    {
+      title: 'Đơn hàng', dataIndex: 'order_code', width: 190,
+      render: (code, r) => (
+        <div>
+          <Typography.Text strong className="order-code">{code}</Typography.Text>
+          <div className="cell-sub">{shortDate(r.created_at)}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Người nhận', dataIndex: 'recipient_name', width: 190,
+      render: (name, r) => (
+        <div>
+          <div>{name}</div>
+          <div className="cell-sub">{r.recipient_phone}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Thanh toán', dataIndex: 'total_amount', width: 190, align: 'right',
+      render: (total, r) => (
+        <div>
+          <Typography.Text strong>{money(total)}</Typography.Text>
+          <div className="cell-sub">
+            {PAYMENT_METHOD[r.payment_method] || '—'} ·{' '}
+            <span className={r.payment_status === 'PAID' ? 'pay-paid' : 'pay-unpaid'}>
+              {r.payment_status === 'PAID' ? 'Đã thu' : PAYMENT_STATUS[r.payment_status] || r.payment_status}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Trạng thái', dataIndex: 'status', width: 200,
+      render: (s, r) => {
+        const tag = orderTag(s);
+        return (
+          <div>
+            <Tag color={tag.color} style={{ marginInlineEnd: 0 }}>{tag.text}</Tag>
+            {r.tracking_code && ['SHIPPING', 'COMPLETED'].includes(s) && (
+              <div className="cell-sub tracking-line">{r.tracking_code}</div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Thao tác', key: 'actions', width: 200, align: 'right', fixed: 'right',
+      render: (_, r) => {
+        const next = nextActionOf(r.status);
+        const more = actionsOf(r.status).filter((a) => !NEXT_ACTIONS.includes(a));
+        return (
+          <Space size={4} onClick={(e) => e.stopPropagation()}>
+            {next ? (
+              <Button type="primary" size="small" icon={ACTION_ICON[next]} loading={busyId === r.id} disabled={busy && busyId !== r.id}
+                onClick={() => runAction(next, [r.id])}>
+                {ORDER_ACTIONS[next].label}
+              </Button>
+            ) : (
+              <Button size="small" icon={<EyeOutlined />} onClick={() => openDetail(r.id)}>Chi tiết</Button>
+            )}
+            <Dropdown trigger={['click']} menu={{
+              items: [
+                { key: 'view', icon: <EyeOutlined />, label: 'Xem chi tiết' },
+                ...more.map((a) => ({ key: a, icon: ACTION_ICON[a], label: ORDER_ACTIONS[a].label, danger: true })),
+              ],
+              onClick: ({ key }) => (key === 'view' ? openDetail(r.id) : confirmDanger(key, [r.id], r.order_code)),
+            }}>
+              <Button type="text" size="small" icon={<EllipsisOutlined />} aria-label="Thao tác khác" />
+            </Dropdown>
+          </Space>
+        );
+      },
+    },
+  ];
+
+  const stage = detail ? STAGE[detail.status] : undefined;
+  const detailNext = detail ? nextActionOf(detail.status) : null;
+  const detailMore = detail ? actionsOf(detail.status).filter((a) => !NEXT_ACTIONS.includes(a)) : [];
 
   return (
     <>
-      <PageHeader title="Đơn hàng" description="Theo dõi, xử lý và cập nhật trạng thái đơn hàng."
-        extra={<Space wrap>
-        <Segmented value={filters.status}
-          options={[{ value: '', label: 'Tất cả' },
-            ...Object.entries(ORDER_STATUS).map(([value, v]) => ({ value, label: v.text }))]}
-          onChange={(status) => setFilters({ ...filters, status, page: 1 })} />
-        <Input.Search placeholder="Mã đơn, tên, SĐT" allowClear style={{ width: 240 }}
-          onSearch={(q) => setFilters({ ...filters, q, page: 1 })} />
-      </Space>} />
+      <PageHeader title="Đơn hàng" description="Xử lý đơn theo từng nhóm. Chọn nhiều đơn để xác nhận hoặc giao hàng cùng lúc." />
 
-      <Card className="surface-card">
-      <Table className="data-table" rowKey="id" loading={loading} dataSource={data.data}
-        locale={{ emptyText: <Empty description="Chưa có đơn hàng phù hợp" /> }}
-        pagination={{ current: filters.page, pageSize: filters.limit, total: data.total, showSizeChanger: false,
-          onChange: (page) => setFilters({ ...filters, page }) }}
-        columns={[
-          { title: 'Mã đơn', dataIndex: 'order_code' },
-          { title: 'Người nhận', dataIndex: 'recipient_name' },
-          { title: 'SĐT', dataIndex: 'recipient_phone' },
-          { title: 'Tổng tiền', dataIndex: 'total_amount', render: money },
-          { title: 'Thanh toán', dataIndex: 'payment_status', render: (s) => PAYMENT_STATUS[s] },
-          { title: 'Trạng thái', dataIndex: 'status',
-            render: (s) => <Tag color={ORDER_STATUS[s].color}>{ORDER_STATUS[s].text}</Tag> },
-          { title: 'Ngày đặt', dataIndex: 'created_at', render: dateTime },
-          { title: '', width: 70, render: (_, r) => (
-            <Tooltip title="Xem chi tiết">
-              <Button type="text" icon={<EyeOutlined />} aria-label="Xem chi tiết" onClick={() => openDetail(r.id)} />
-            </Tooltip>
-          ) },
-        ]} />
+      <Card className="surface-card orders-card">
+        <Tabs
+          activeKey={filters.group}
+          onChange={(group) => update({ group })}
+          items={[
+            { key: 'ALL', label: <TabLabel text="Tất cả" count={totalCount} /> },
+            ...ORDER_GROUPS.map((g) => ({
+              key: g.key,
+              label: <TabLabel text={g.label} count={groupCount(g)} urgent={g.key === 'PENDING'} />,
+            })),
+          ]}
+        />
+
+        <div className="filter-row">
+          <Input.Search placeholder="Mã đơn, mã vận đơn, tên, SĐT" allowClear style={{ width: 300 }}
+            onSearch={(q) => update({ q: q.trim() })} />
+          <Select value={filters.payment} style={{ width: 190 }} onChange={(payment) => update({ payment })}
+            options={[
+              { value: '', label: 'Mọi thanh toán' },
+              { value: 'UNPAID', label: 'Chưa thanh toán' },
+              { value: 'PAID', label: 'Đã thanh toán' },
+            ]} />
+          <Button icon={<ReloadOutlined />} onClick={() => load()} loading={loading}>Làm mới</Button>
+        </div>
+
+        {selectedRows.length > 0 && (
+          <div className="bulk-bar" role="region" aria-label="Thao tác nhiều đơn">
+            <span className="bulk-count">Đã chọn {selectedRows.length} đơn</span>
+            <Space wrap>
+              {bulkButtons.map(({ action, count }) => (
+                <Button key={action} type={ORDER_ACTIONS[action].danger ? 'default' : 'primary'} danger={ORDER_ACTIONS[action].danger}
+                  icon={ACTION_ICON[action]} loading={busy} onClick={() => applyBulk(action)}>
+                  {ORDER_ACTIONS[action].label} ({count})
+                </Button>
+              ))}
+              {bulkButtons.length === 0 && <Typography.Text type="secondary">Các đơn đã chọn không còn thao tác nào.</Typography.Text>}
+              <Button type="link" onClick={() => setSelectedKeys([])}>Bỏ chọn</Button>
+            </Space>
+          </div>
+        )}
+
+        <Table className="data-table" rowKey="id" loading={loading} dataSource={data.data} columns={columns}
+          scroll={{ x: 980 }}
+          locale={{ emptyText: <Empty description="Chưa có đơn hàng phù hợp" /> }}
+          rowSelection={{
+            selectedRowKeys: selectedKeys,
+            onChange: setSelectedKeys,
+            getCheckboxProps: (r) => ({ disabled: actionsOf(r.status).length === 0, 'aria-label': `Chọn đơn ${r.order_code}` }),
+          }}
+          onRow={(r) => ({
+            onClick: (e) => {
+              if (e.target.closest('.ant-checkbox-wrapper, .ant-table-selection-column, button, .ant-dropdown')) return;
+              openDetail(r.id);
+            },
+            style: { cursor: 'pointer' },
+          })}
+          pagination={{
+            current: filters.page, pageSize: filters.limit, total: data.total, showSizeChanger: true,
+            pageSizeOptions: [20, 50, 100], showTotal: (t) => `${t} đơn`,
+            onChange: (page, limit) => { setFilters((f) => ({ ...f, page: limit !== f.limit ? 1 : page, limit })); setSelectedKeys([]); },
+          }} />
       </Card>
 
       <Drawer open={!!detail} onClose={() => setDetail(null)} width={720} destroyOnClose
-        title={detail ? `Đơn ${detail.order_code}` : ''}>
+        title={detail ? (
+          <Space>
+            <span>Đơn {detail.order_code}</span>
+            <Tag color={orderTag(detail.status).color}>{orderTag(detail.status).text}</Tag>
+          </Space>
+        ) : ''}
+        extra={detail && <Button icon={<PrinterOutlined />} onClick={printDeliverySlip}>In phiếu giao hàng</Button>}>
         {detail && (
           <>
-            <Button icon={<PrinterOutlined />} onClick={printDeliverySlip} style={{ marginBottom: 16 }}>
-              In phiếu giao hàng (A5)
-            </Button>
+            {stage !== undefined ? (
+              <Steps size="small" current={stage} style={{ marginBottom: 20 }}
+                items={[{ title: 'Chờ xác nhận' }, { title: 'Chuẩn bị hàng' }, { title: 'Đang giao' }, { title: 'Hoàn tất' }]} />
+            ) : (
+              <Alert type="error" showIcon style={{ marginBottom: 16 }}
+                message={detail.status === 'CANCELLED' ? 'Đơn đã bị hủy' : 'Đơn đã hoàn trả'} />
+            )}
+
+            {(detailNext || detailMore.length > 0) && (
+              <div className="action-panel">
+                <Input.TextArea rows={2} placeholder="Ghi chú cho lịch sử đơn (không bắt buộc)" value={note}
+                  onChange={(e) => setNote(e.target.value)} />
+                {detailNext === 'ship' && (
+                  <Collapse ghost size="small" items={[{
+                    key: 'ship',
+                    label: 'Tùy chỉnh vận chuyển (không bắt buộc)',
+                    children: (
+                      <Space wrap>
+                        <Input placeholder="Đơn vị vận chuyển (mặc định)" value={ship.carrier} style={{ width: 240 }}
+                          onChange={(e) => setShip({ ...ship, carrier: e.target.value })} />
+                        <Input placeholder="Mã vận đơn (để trống: tự tạo)" value={ship.tracking_code} style={{ width: 240 }}
+                          onChange={(e) => setShip({ ...ship, tracking_code: e.target.value })} />
+                      </Space>
+                    ),
+                  }]} />
+                )}
+                <Space wrap style={{ marginTop: 8 }}>
+                  {detailNext && (
+                    <Button type="primary" size="large" icon={ACTION_ICON[detailNext]} loading={busy}
+                      onClick={() => runAction(detailNext, [detail.id], {
+                        note: note.trim() || undefined,
+                        ...(detailNext === 'ship' ? { carrier: ship.carrier.trim() || undefined, tracking_code: ship.tracking_code.trim() || undefined } : {}),
+                      })}>
+                      {ORDER_ACTIONS[detailNext].label}
+                    </Button>
+                  )}
+                  {detailMore.map((a) => (
+                    <Button key={a} danger icon={ACTION_ICON[a]} disabled={busy}
+                      onClick={() => {
+                        modal.confirm({
+                          title: dangerTitle(a, [detail.id], detail.order_code),
+                          content: 'Số lượng hàng của đơn sẽ được cộng lại vào kho. Thao tác này không hoàn tác được.',
+                          okText: ORDER_ACTIONS[a].label, cancelText: 'Không', okButtonProps: { danger: true },
+                          onOk: () => runAction(a, [detail.id], { note: note.trim() || undefined }),
+                        });
+                      }}>
+                      {ORDER_ACTIONS[a].label}
+                    </Button>
+                  ))}
+                </Space>
+              </div>
+            )}
+
             <Descriptions bordered size="small" column={1}>
-              <Descriptions.Item label="Trạng thái">
-                <Tag color={ORDER_STATUS[detail.status].color}>{ORDER_STATUS[detail.status].text}</Tag>
-              </Descriptions.Item>
               <Descriptions.Item label="Người nhận">{detail.recipient_name} - {detail.recipient_phone}</Descriptions.Item>
               <Descriptions.Item label="Địa chỉ">
                 {detail.shipping_address}, {detail.ward}, {detail.district}, {detail.province}
               </Descriptions.Item>
               <Descriptions.Item label="Tài khoản">{detail.customer_name || detail.customer_email}</Descriptions.Item>
               <Descriptions.Item label="Thanh toán">
-                {detail.payment?.payment_method} - {PAYMENT_STATUS[detail.payment_status]}
+                {PAYMENT_METHOD[detail.payment?.payment_method] || detail.payment?.payment_method} - {PAYMENT_STATUS[detail.payment_status]}
               </Descriptions.Item>
               {detail.shipment && (
                 <Descriptions.Item label="Vận chuyển">
-                  {detail.shipment.carrier || '—'} {detail.shipment.tracking_code ? `(${detail.shipment.tracking_code})` : ''}
+                  {detail.shipment.carrier || '—'}
+                  {detail.shipment.tracking_code && (
+                    <> · <Typography.Text code copyable>{detail.shipment.tracking_code}</Typography.Text></>
+                  )}
                 </Descriptions.Item>
               )}
               {detail.customer_note && <Descriptions.Item label="Ghi chú khách">{detail.customer_note}</Descriptions.Item>}
@@ -170,32 +480,6 @@ export default function Orders() {
               <Descriptions.Item label="Phí vận chuyển">{money(detail.shipping_fee)}</Descriptions.Item>
               <Descriptions.Item label="Tổng cộng"><b>{money(detail.total_amount)}</b></Descriptions.Item>
             </Descriptions>
-
-            {next.length > 0 && (
-              <div style={{ margin: '16px 0', padding: 12, background: '#fafafa', borderRadius: 8 }}>
-                <Typography.Text strong>Cập nhật trạng thái</Typography.Text>
-                <Input.TextArea rows={2} placeholder="Ghi chú (không bắt buộc)" value={note}
-                  onChange={(e) => setNote(e.target.value)} style={{ margin: '8px 0' }} />
-                {next.includes('SHIPPING') && (
-                  <Space style={{ marginBottom: 8 }}>
-                    <Input placeholder="Đơn vị vận chuyển" value={ship.carrier}
-                      onChange={(e) => setShip({ ...ship, carrier: e.target.value })} />
-                    <Input placeholder="Mã vận đơn" value={ship.tracking_code}
-                      onChange={(e) => setShip({ ...ship, tracking_code: e.target.value })} />
-                  </Space>
-                )}
-                <div>
-                  <Space wrap>
-                    {next.map((s) => (
-                      <Button key={s} type={s === 'CANCELLED' || s === 'RETURNED' ? 'default' : 'primary'}
-                        danger={s === 'CANCELLED' || s === 'RETURNED'} onClick={() => changeStatus(s)}>
-                        {ORDER_STATUS[s].text}
-                      </Button>
-                    ))}
-                  </Space>
-                </div>
-              </div>
-            )}
 
             <Typography.Text strong>Lịch sử</Typography.Text>
             <Timeline style={{ marginTop: 12 }} items={detail.history.map((h) => ({

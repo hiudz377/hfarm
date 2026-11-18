@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -30,6 +30,8 @@ function Section({ title, children }) {
     </Card>
   );
 }
+
+const REVIEW_STATUS = { PENDING: 'chờ duyệt', APPROVED: 'đã hiển thị', REJECTED: 'đã ẩn' };
 
 const Row = ({ label, value, strong }) => (
   <View style={styles.row}>
@@ -120,13 +122,35 @@ export default function OrderDetail() {
 
         <Section title={`Sản phẩm (${order.items.length})`}>
           {order.items.map((it) => (
-            <View key={it.id} style={styles.item}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{it.product_name}</Text>
-                <Text style={styles.muted}>{[it.color_name, it.size_name].filter(Boolean).join(' / ')}</Text>
-                <Text style={styles.muted}>{money(it.unit_price)} x {it.quantity}</Text>
+            <View key={it.id} style={styles.itemBlock}>
+              <View style={styles.item}>
+                <View style={styles.itemInfo}>
+                  {it.product_id ? (
+                    <Pressable onPress={() => router.push(`/product/${it.product_id}`)} role="link" aria-label={`Xem sản phẩm ${it.product_name}`}>
+                      <Text style={[styles.itemName, styles.link]}>{it.product_name}</Text>
+                    </Pressable>
+                  ) : (
+                    <Text style={styles.itemName}>{it.product_name}</Text>
+                  )}
+                  <Text style={styles.muted}>{[it.color_name, it.size_name].filter(Boolean).join(' / ')}</Text>
+                  <Text style={styles.muted}>{money(it.unit_price)} x {it.quantity}</Text>
+                </View>
+                <Text style={styles.itemTotal}>{money(it.line_total)}</Text>
               </View>
-              <Text style={styles.itemTotal}>{money(it.line_total)}</Text>
+              {order.status === 'COMPLETED' ? (
+                it.review_id ? (
+                  <Text style={styles.reviewed}>Bạn đã đánh giá {it.review_rating} sao · {REVIEW_STATUS[it.review_status] ?? ''}</Text>
+                ) : it.product_id ? (
+                  <Button
+                    title="Đánh giá sản phẩm"
+                    variant="outline"
+                    style={styles.reviewBtn}
+                    onPress={() =>
+                      router.push({ pathname: '/review', params: { orderItemId: it.id, orderId: id, productId: it.product_id, productName: it.product_name } })
+                    }
+                  />
+                ) : null
+              ) : null}
             </View>
           ))}
         </Section>
@@ -184,7 +208,11 @@ const styles = StyleSheet.create({
   date: { fontSize: 13, color: colors.muted },
   section: { padding: space.md, gap: space.sm },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  itemBlock: { gap: space.sm },
   item: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
+  link: { color: colors.primary },
+  reviewed: { fontSize: 13, color: colors.muted },
+  reviewBtn: { minHeight: 38, alignSelf: 'flex-start' },
   itemInfo: { flex: 1, gap: 2 },
   itemName: { fontSize: 14, fontWeight: '600', color: colors.text },
   itemTotal: { fontSize: 14, fontWeight: '600', color: colors.text },

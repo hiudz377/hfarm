@@ -35,10 +35,14 @@ app.get('/', (req, res) => res.json({ message: 'Server HFarm đang chạy!' }));
 
 // Công khai: danh mục, thương hiệu, sản phẩm
 app.use('/api', require('./src/routes/catalog'));
+// Công khai: đăng ký tài khoản khách trong app (có giới hạn tần suất)
+app.use('/api/auth', require('./src/routes/auth'));
 // Cần đăng nhập (khách hàng)
 app.use('/api/me', require('./src/routes/me'));
 app.use('/api/cart', require('./src/routes/cart'));
 app.use('/api/orders', require('./src/routes/orders'));
+app.use('/api/favorites', require('./src/routes/favorites'));
+app.use('/api/reviews', require('./src/routes/reviews'));
 // Chỉ admin / staff (CMS)
 app.use('/api/admin', authenticate, requireRole('admin', 'staff'), require('./src/routes/admin'));
 

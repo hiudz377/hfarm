@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "setup:keycloak": "node scripts/setup-keycloak.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

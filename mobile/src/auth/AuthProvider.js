@@ -10,7 +10,8 @@ import * as keycloak from './keycloak';
 //     status: 'loading' | 'authenticated' | 'unauthenticated',
 //     user,                 // { id, ... } hoặc null; tên + email của người dùng lấy từ GET /api/me
 //     sessionExpired,       // true khi phiên vừa hết (token bị từ chối, refresh token hết hạn)
-//     signIn(), signUp(),   // mở trang Keycloak; trả { status: 'signedIn' | 'cancelled' } hoặc ném AuthError
+//     signInWithPassword({ email, password })  // đăng nhập ngay trong app (không mở trình duyệt)
+//     signIn(), signUp(),   // mở trang Keycloak (dự phòng, quên mật khẩu); trả { status: 'signedIn' | 'cancelled' } hoặc ném AuthError
 //     signOut(), getAccessToken(opts), acknowledgeExpired()
 //   }
 // Chế độ dev (EXPO_PUBLIC_AUTH_MODE=dev): luôn "đã đăng nhập" là khách hàng, client tự gắn header X-Dev-Role.
@@ -25,6 +26,7 @@ const DEV_VALUE = {
   sessionExpired: false,
   signIn: async () => ({ status: 'signedIn' }),
   signUp: async () => ({ status: 'signedIn' }),
+  signInWithPassword: async () => ({ status: 'signedIn' }),
   signOut: noop,
   getAccessToken: noToken,
   acknowledgeExpired: () => {},
@@ -81,11 +83,11 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => {
     if (AUTH_MODE === 'dev') return DEV_VALUE;
-    const guard = (fn) => async () => {
+    const guard = (fn) => async (...args) => {
       if (KEYCLOAK_MISSING.length) {
         throw new keycloak.AuthError('config', `Thiếu biến môi trường: ${KEYCLOAK_MISSING.join(', ')}`);
       }
-      return fn();
+      return fn(...args);
     };
     return {
       status: state.status,
@@ -93,6 +95,7 @@ export function AuthProvider({ children }) {
       sessionExpired: !!state.expired,
       signIn: guard(() => keycloak.signIn()),
       signUp: guard(() => keycloak.signIn({ create: true })),
+      signInWithPassword: guard((credentials) => keycloak.signInWithPassword(credentials)),
       signOut: keycloak.signOut,
       getAccessToken: keycloak.getAccessToken,
       acknowledgeExpired,

@@ -77,6 +77,11 @@ router.get('/users', wrap(async (req, res) => {
   const where = [];
   const params = [];
   if (req.query.type) { where.push('u.user_type = ?'); params.push(req.query.type); }
+  if (req.query.status) {
+    if (!['ACTIVE', 'INACTIVE', 'BLOCKED'].includes(req.query.status)) throw httpError(400, `Trạng thái tài khoản không hợp lệ: ${req.query.status}`);
+    where.push('u.status = ?');
+    params.push(req.query.status);
+  }
   if (req.query.q) {
     where.push('(u.full_name LIKE ? OR u.email LIKE ? OR u.phone LIKE ?)');
     params.push(`%${req.query.q}%`, `%${req.query.q}%`, `%${req.query.q}%`);

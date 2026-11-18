@@ -36,6 +36,8 @@ function Routes() {
         <Stack.Screen name="order/[id]" options={{ title: 'Chi tiết đơn hàng' }} />
         <Stack.Screen name="profile" options={{ title: 'Thông tin cá nhân' }} />
         <Stack.Screen name="addresses" options={{ title: 'Sổ địa chỉ' }} />
+        <Stack.Screen name="favorites" options={{ title: 'Yêu thích' }} />
+        <Stack.Screen name="review" options={{ title: 'Đánh giá sản phẩm', presentation: 'modal' }} />
         <Stack.Screen name="checkout" options={{ title: 'Thanh toán' }} />
         <Stack.Screen name="address-form" options={{ title: 'Địa chỉ', presentation: 'modal' }} />
         {/* Đã đặt xong: không cho vuốt/bấm quay lại màn thanh toán (giỏ đã trống) */}

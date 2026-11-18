@@ -125,6 +125,79 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - Kiểm tra đã chạy: API trên MySQL thật nhưng database tạm (đã xóa; `clothing_store` không bị đụng) 51 kiểm tra đạt (từng bộ lọc và tổ hợp, biên giá, biến thể ngừng bán/sản phẩm nháp không lọt vào, size + màu + còn hàng phải cùng một biến thể, phân trang khi sắp xếp, đầu vào xấu/chèn SQL trả 400, CMS giữ hành vi cũ); logic lọc của app 23 kiểm tra; `expo export` Android + iOS; bản web của app trên Edge nối backend + DB tạm, 32 bước đạt.
 - **Chưa kiểm tra**: trên điện thoại / Expo Go (Modal trượt, `Switch`, vùng an toàn phía dưới bảng, nút Back của Android đóng bảng).
 
+### 4.2 Size chữ / size số tách riêng + chỉ hiện mục đang dùng (sửa 4.1 theo góp ý)
+- [x] Backend `GET /sizes` trả `size_group` (LETTER | NUMBER | OTHER) và xếp chữ -> số -> khác; size chữ xếp theo nghĩa (XS < S < M < L < XL < XXL = 2XL), size số theo giá trị số. Suy ra từ tên size, không đổi database. `?in_use=1` (cũng có ở `/colors`, `/brands`) chỉ trả mục có sản phẩm ĐANG BÁN dùng
+- [x] Bảng lọc mobile: cụm "Size chữ" và "Size số" (+ "Khác"), tiêu đề cụm chỉ hiện khi có từ hai cụm; không còn hiện size/màu/thương hiệu mà chọn xong chỉ ra kết quả trống
+- Kiểm tra đã chạy: 39 kiểm tra thuần cho nhóm/thứ tự size; API trên DB tạm (sizes, colors, brands, `in_use`, size chỉ có ở sản phẩm nháp/biến thể tắt bị ẩn); bản web của app 37 bước đạt (cả 4.1).
+
+### 4.3 Mã vận đơn tự sinh + trang Đơn hàng CMS xử lý nhanh (làm ở backend + web, không đổi app mobile)
+- [x] Mã vận đơn `HF` + yyMMdd + 6 ký tự (bỏ I, O, 0, 1) tự sinh khi chuyển sang Đang giao nếu không nhập; đơn vị mặc định `HFarm Express` (`DEFAULT_CARRIER`). Khách xem mã này trong chi tiết đơn trên mobile như trước
+- [x] CMS: 7 trạng thái gom thành 5 tab có số đếm, tìm theo mã đơn/mã vận đơn/tên/SĐT, lọc thanh toán, nút "bước tiếp theo" trên từng dòng (Xác nhận / Giao hàng / Hoàn tất), chọn nhiều đơn để xử lý một lần, Hủy/Hoàn trả luôn hỏi lại, ngăn chi tiết có tiến trình 4 bước
+- Kiểm tra đã chạy: API trên DB tạm 64 kiểm tra (xử lý hàng loạt, đơn lỗi không chặn cả lô, mã vận đơn duy nhất, hoàn kho, hai nhân viên bấm cùng lúc, đầu vào xấu, phân quyền); CMS thật trên Edge 40 bước đạt; build CMS thành công.
+- **Chưa kiểm tra**: `DEFAULT_CARRIER` đặt qua `.env`; bản CMS khi đăng nhập Keycloak thật (chỉ thử ở chế độ `VITE_AUTH_DISABLED`); nhiều hơn vài chục đơn (chưa thử hiệu năng).
+
+### 4.4 Gợi ý tìm kiếm + lịch sử tìm kiếm
+- [x] Backend `GET /products/suggest?q=` (không phân biệt hoa/thường và dấu, xếp: bắt đầu bằng -> đầu một từ -> chứa giữa; `% _ ` coi là chữ thường)
+- [x] Mobile: vào ô tìm kiếm hiện lớp riêng thay cho danh sách. Chưa gõ: "Tìm kiếm gần đây" (xóa từng mục / xóa tất cả, lưu bằng `@react-native-async-storage/async-storage`, tối đa 8) + "Phổ biến" (6 sản phẩm bán chạy). Đang gõ: dòng "Tìm “...”" + gợi ý sản phẩm có ảnh, giá và chữ khớp tô đậm. Hủy / nút Back Android thoát tìm kiếm
+- Thay đổi hành vi có chủ đích: danh sách **không còn lọc ngay khi gõ**; áp dụng khi bấm Enter, chọn gợi ý hoặc chọn từ lịch sử. Chạm lại vào ô đang chứa từ khóa vừa tìm thì hiện lịch sử (gõ khác đi mới hiện gợi ý)
+- Phụ thuộc mới: `@react-native-async-storage/async-storage` 2.2.0 (có sẵn trong Expo Go SDK 58, không cần development build)
+
+### 4.5 Chi tiết sản phẩm đầy đủ hơn + sản phẩm liên quan
+- [x] Thư viện ảnh có ảnh nhỏ bấm chuyển, nhãn giảm giá và giá gạch ngang (chỉ khi đã chọn phiên bản hoặc mọi phiên bản cùng giá, để không hiện nhãn đi kèm khoảng giá), đánh giá sao + "Đã bán N", khối "Thông tin sản phẩm" (danh mục, thương hiệu, SKU của phiên bản đang chọn, tình trạng), mô tả "Xem thêm / Thu gọn", chia sẻ (`Share` của React Native), phần Đánh giá (điểm trung bình + phân bố + danh sách, tải thêm), dải ngang "Sản phẩm liên quan"
+- [x] Backend: `GET /products/:id/related`; chi tiết trả `rating_avg`, `rating_count`, `sold_count`, biến thể xếp size chữ trước size số (XS < S < M < L < XL < 2XL, số tăng dần); thẻ sản phẩm có giá gạch + nhãn giảm giá + điểm đánh giá
+
+### 4.6 Yêu thích
+- [x] Backend `/api/favorites` (ids, danh sách phân trang, thích, bỏ thích; thích lặp lại vẫn một dòng; sản phẩm bị ẩn không hiện trong danh sách)
+- [x] Mobile: trái tim trên mọi thẻ sản phẩm và ảnh chi tiết (cập nhật lạc quan, lỗi thì hoàn lại + báo), màn "Yêu thích" từ tab Tài khoản (bỏ tim thì thẻ biến mất ngay), chưa đăng nhập thì mời đăng nhập
+
+### 4.7 Đánh giá sản phẩm
+- [x] Backend: `POST /api/reviews` (chỉ món trong đơn Hoàn thành của chính mình, mỗi món một lần, chống gửi đúp bằng khóa dòng), `GET /products/:id/reviews` (chỉ đã duyệt, tên người đánh giá được che); trạng thái đầu `PENDING`
+- [x] Mobile: nút "Đánh giá sản phẩm" cho từng món trong đơn Hoàn thành -> màn chọn sao + nhận xét; sau đó hiện "Bạn đã đánh giá N sao · chờ duyệt / đã hiển thị / đã ẩn"; tên sản phẩm trong đơn bấm mở trang sản phẩm
+- [x] CMS: trang "Đánh giá" (tab Chờ duyệt / Đã duyệt / Đã ẩn / Tất cả có số đếm, tìm theo sản phẩm/người/nội dung, lọc số sao, duyệt / ẩn / duyệt lại từng cái hoặc hàng loạt), huy hiệu số chờ duyệt trên menu
+
+### 4.8 CMS đẹp và chuyên nghiệp hơn
+- [x] Tổng quan: khu "Cần xử lý" (đơn chờ xác nhận, đánh giá chờ duyệt, biến thể sắp hết hàng, bấm để tới trang tương ứng), dòng số liệu phụ dưới thẻ KPI, bảng "Đơn hàng gần đây", biểu đồ trạng thái đơn dùng đúng màu nhãn trạng thái
+- [x] Sản phẩm: ảnh nhỏ + thương hiệu/danh mục dưới tên, giá gạch, nhãn tồn kho theo mức (hết hàng / sắp hết / còn), điểm đánh giá, bộ lọc nằm trong thẻ, thao tác bằng nút biểu tượng có chú thích; favicon HFarm
+- Các trang còn lại (Khách hàng, Mã giảm giá, Danh mục/Thương hiệu, Size & Màu, Kho hàng, ngăn sản phẩm, khung giao diện) đã làm đẹp ở mục 4.12; màn đăng nhập Keycloak của CMS vẫn chưa đụng tới
+
+### 4.9 Docker Compose
+- [x] `docker-compose.yml` + Dockerfile backend + Dockerfile web (build tĩnh, nginx): MySQL riêng trong container (volume), nạp `schema.sql` lần đầu, backend có healthcheck, ảnh tải lên có volume; cổng mặc định 3100 / 8088 / 3307 để không đụng bản dev; cấu hình qua `.env` (mẫu `.env.example`). Chi tiết ở README mục 5
+
+### Mức kiểm tra GĐ4 (4.4 - 4.9), đã chạy thật
+- API trên MySQL thật nhưng database tạm (đã xóa): 64 kiểm tra (đơn hàng, size) + 76 kiểm tra (gợi ý, liên quan, yêu thích, đánh giá, duyệt)
+- Logic thuần: nhóm/thứ tự size 39, lịch sử tìm kiếm + tô chữ khớp 23, bộ lọc 23
+- Bản web của app (Expo Router thật, Edge) nối backend + DB tạm: bảng lọc 37 bước, tìm kiếm/chi tiết/yêu thích/đánh giá 45 bước; `expo export` Android + iOS thành công
+- CMS (Vite, Edge): Đơn hàng 40 bước, Đánh giá/Tổng quan/Sản phẩm 24 bước; `vite build` thành công
+- Docker Compose (project và cổng riêng, đã dọn sạch): build 3 image, MySQL tự nạp schema, API/ảnh/đặt hàng, nginx phục vụ CMS (SPA fallback, cache), dữ liệu + ảnh còn nguyên sau `restart` và sau `down` rồi `up`, backend tự nối lại khi MySQL khởi động lại, CMS trong container chạy trên trình duyệt
+- **Chưa kiểm tra**: trên điện thoại / Expo Go (bảng lọc trượt, `Share`, AsyncStorage thật, hộp thoại `Alert` native, nút Back Android khi đang tìm kiếm, ảnh thật từ máy chủ); CMS khi đăng nhập Keycloak thật (chỉ thử ở chế độ `VITE_AUTH_DISABLED`); Docker ở chế độ Keycloak và việc nạp dữ liệu bằng `mysqldump` (lệnh ghi trong README chưa thử trên dữ liệu thật); hiệu năng với nhiều sản phẩm / đánh giá
+
+### 4.10 Đặt hàng đồng thời (kiểm tra + sửa)
+- Kiểm tra thật trên MySQL: tồn 5, 3 người cùng đặt 3 (8 lần thử) luôn đúng 1 đơn thành công, kho còn 2; tồn 5 + 20 yêu cầu cùng lúc = đúng 5 đơn, kho về 0 (không âm); 30 đơn 2 sản phẩm theo thứ tự ngược nhau không deadlock; mã giảm giá còn 1 lượt + 3 người dùng cùng lúc = đúng 1 người. Cơ chế: `SELECT ... FOR UPDATE` dòng tồn kho trong transaction (và dòng mã giảm giá), khóa theo thứ tự id.
+- **Lỗi thật đã sửa**: một người bấm đặt hai lần cùng lúc (hai yêu cầu lấy hàng từ giỏ) tạo HAI đơn và trừ kho hai lần (12/12 lần thử). Nay `createOrder` khóa dòng giỏ trong transaction, đọc lại hàng trong giỏ và chỉ nhận giỏ còn `ACTIVE`: yêu cầu thứ hai báo "Giỏ hàng trống". 12/12 lần thử chỉ tạo đúng 1 đơn, kho trừ đúng.
+- Sửa thêm: trùng mã đơn (ngẫu nhiên 5 số) trước đây báo lỗi 409 cho khách; nay tự thử mã khác (tối đa 5 lần).
+- Chưa làm: khóa chống đặt trùng khi gửi đơn bằng `items` trong body (app luôn đặt từ giỏ), giữ chỗ hàng trong giỏ (hàng chỉ bị trừ lúc đặt: giỏ đầy nhưng hết hàng lúc thanh toán sẽ báo "Không đủ tồn kho").
+
+### 4.11 Đăng nhập + đăng ký ngay trong app
+- [x] Màn `/login`: form email + mật khẩu, tab Đăng nhập / Đăng ký, hiện/ẩn mật khẩu, kiểm tra ngay trên máy, lỗi tiếng Việt (sai thông tin, tài khoản khóa, đã đăng ký, mật khẩu chưa đạt chính sách...), tự đăng nhập sau khi đăng ký; tab Giỏ hàng / Đơn hàng / Tài khoản chuyển tới màn này
+- [x] Backend: `POST /api/auth/register` (Keycloak Admin API bằng tài khoản dịch vụ, role customer, giới hạn tần suất, dọn tài khoản dở dang), `GET /api/auth/config`; script `npm run setup:keycloak` cấu hình Keycloak một lần (bật Direct access grants, tạo client dịch vụ, cấp quyền tối thiểu, in/ghi secret)
+- Dự phòng: client chưa bật Direct access grants hoặc backend chưa bật đăng ký thì app hiện nút dùng trang Keycloak như trước
+- Thêm `role="button"` cho component Button dùng chung (truy cập được hơn)
+- Kiểm tra đã chạy (Keycloak 26.8.1 THẬT trong container thử nghiệm riêng, không đụng Keycloak của người dùng): script + API 67 kiểm tra (chạy lại an toàn, quyền tối thiểu, đăng ký, trùng email, dữ liệu sai, chính sách mật khẩu, thiếu role -> dọn tài khoản, token dịch vụ hết hạn tự làm mới, CORS, 429, backend chưa cấu hình / sai secret / Keycloak chết); logic thuần 50 kiểm tra; giao diện trên Edge nối backend + Keycloak thật 32 bước (không mở trang/cửa sổ nào khác, mật khẩu không lọt vào URL/console, tải lại vẫn đăng nhập, realm bắt xác minh email, client tắt Direct access grants, backend báo không hỗ trợ đăng ký trong app)
+- **Chưa kiểm tra**: Keycloak THẬT của người dùng (chưa chạy script trên đó; container `keycloak-hfarm` đang tắt), điện thoại / Expo Go, gửi email xác minh / quên mật khẩu (cần SMTP của realm), CMS đăng nhập (vẫn qua trang Keycloak, không đổi)
+
+### 4.12 CMS chuyên nghiệp và đẹp hơn nữa (làm nốt các trang còn lại + khung giao diện)
+- [x] Khung: menu bên thu gọn được (nhớ lựa chọn, tự thu gọn trên màn hình hẹp, khi thu gọn tiêu đề nhóm thành vạch kẻ), breadcrumb, chuông "Cần xử lý" (đơn chờ xác nhận / đánh giá chờ duyệt / biến thể sắp hết hàng, bấm để tới trang tương ứng), tiêu đề tab trình duyệt theo trang, màu / bo góc / bảng / nút đồng bộ qua theme chung
+- [x] Khách hàng: ảnh đại diện chữ cái đầu + tên + email, tìm kiếm, lọc Tất cả / Hoạt động / Đã khóa (API `GET /api/admin/users?status=`), cột chi tiêu + ngày tham gia, khóa / mở khóa có hộp xác nhận, ngăn lịch sử mua hàng có thống kê
+- [x] Mã giảm giá: tab theo trạng thái (Đang chạy / Sắp diễn ra / Hết lượt / Hết hạn / Đã tắt) có số đếm, tìm kiếm, sao chép mã, huy hiệu ưu đãi, thanh lượt dùng đổi màu, ghi chú thời hạn ("Còn 5 ngày"), bật / tắt và sửa ngay trên dòng
+- [x] Size & Màu: size chia cụm Size chữ / Size số / Khác, xếp đúng thứ tự không phụ thuộc lúc thêm (sửa điểm yếu đã ghi ở 4.8); màu dạng thẻ có chấm màu + mã hex; báo rõ khi xóa size / màu đang được dùng
+- [x] Danh mục / Thương hiệu (trang CRUD dùng chung): bỏ cột ID, tìm kiếm, lọc trạng thái, đếm, hộp xác nhận xóa nói rõ hậu quả (thương hiệu: sản phẩm sẽ không còn thương hiệu; danh mục đang có sản phẩm: không xóa được)
+- [x] Kho hàng: thẻ KPI bấm để lọc (hết hàng / sắp hết / tất cả), tìm kiếm, ảnh + SKU, nhãn tồn kho theo mức; Tổng quan: biểu đồ doanh thu dạng vùng
+- [x] Ngăn sản phẩm: tiêu đề là tên sản phẩm + nhãn trạng thái, nút Lưu / Đóng cố định ở chân ngăn, các ô nhập rộng đều, chấm màu ở bảng biến thể
+- Sửa trong lúc kiểm tra: tooltip của nút xóa / khóa nằm đè lên hộp xác nhận (che nút Hủy / Đồng ý) → component dùng chung `ConfirmButton` (áp dụng cho Khách hàng, Size & Màu, Danh mục / Thương hiệu, Sản phẩm); lỗi kiểm tra form (ô trống) thành "unhandled rejection" trong console ở mọi form (nay dùng `validate()` trong `utils.js`); cảnh báo `useForm is not connected` ở bản dev (Modal có `forceRender`); Tổng quan, Danh mục, Thương hiệu tràn ngang trên điện thoại (bảng cuộn ngang trong thẻ)
+- Kiểm tra đã chạy (Edge + Vite, backend + MySQL tạm, chế độ `VITE_AUTH_DISABLED`): trang mới 75 bước (lọc / khóa / mở khóa / lịch sử, tab + tìm + sao chép + bật tắt + tạo / sửa mã và báo lỗi nhập, cụm size + thêm + xóa đang dùng / không dùng, màu, danh mục / thương hiệu, KPI kho + nhập kho + lịch sử, ngăn sản phẩm, thu gọn menu + nhớ lựa chọn, chuông, màn hình hẹp, không lỗi console); chạy lại bộ cũ: Đơn hàng 40 bước, Tổng quan / Sản phẩm / Đánh giá 24 bước đều đạt; 10 trang không tràn ngang ở 390 / 768 / 1024 px; `vite build` thành công
+- **Chưa kiểm tra**: CMS khi đăng nhập Keycloak thật (menu theo vai trò staff / admin chỉ thử ở chế độ dev), Safari / Firefox (chỉ thử Edge), màn hình hẹp chỉ kiểm tra không tràn ngang và xem ảnh chụp (chưa dùng trên máy thật), hiệu năng với hàng nghìn khách / mã giảm giá (bảng Khách hàng phân trang phía máy chủ, Mã giảm giá lọc phía trình duyệt trên toàn bộ danh sách), màn đăng nhập Keycloak của CMS (chưa làm theme thương hiệu)
+- Ghi chú: trong lúc kiểm tra có hai lần (trên tổng cộng khoảng 8 lần chạy bước này) bấm nút "Mở khóa" trong hộp xác nhận bị quá thời gian chờ của Playwright dù hộp xác nhận đang hiện bình thường trên ảnh chụp; sau đó lặp lại 25 vòng khóa / mở khóa liên tiếp đều đạt và bộ 75 bước chạy lại đều đạt (cả lần cuối); chưa tìm ra nguyên nhân chắc chắn, nghi do thời điểm chạy của bài kiểm tra
+
 ## Giả định và việc cần quyết định sau
 
 - Dữ liệu: `database/seed.sql` mà README gốc nhắc **không có trong repo**, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.

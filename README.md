@@ -2,15 +2,16 @@
 
 ```
 HFarm/
-├── database/   schema.sql (tạo bảng) + seed.sql (dữ liệu mẫu)
+├── database/   schema.sql (tạo bảng, size, màu, danh mục)
 ├── backend/    Node.js + Express + MySQL   -> http://localhost:3000
-└── web/        React + Vite + Ant Design   -> http://localhost:5173
+├── web/        React + Vite + Ant Design   -> http://localhost:5173
+├── mobile/     Expo (React Native), app khách hàng
+└── docker-compose.yml   chạy cả MySQL + backend + web chỉ bằng một lệnh (xem mục 5)
 ```
 
 ## 1. Database (làm 1 lần)
-Mở MySQL Workbench (hoặc phpMyAdmin), chạy lần lượt 2 file:
-1. `database/schema.sql`  (tự tạo database `clothing_store`, bảng, size, màu, danh mục)
-2. `database/seed.sql`    (sản phẩm, tồn kho, mã giảm giá mẫu)
+Mở MySQL Workbench (hoặc phpMyAdmin), chạy file `database/schema.sql` (tự tạo database `clothing_store`, bảng, size, màu, danh mục).
+Database mới chưa có sản phẩm: nhập qua web CMS (mục Sản phẩm).
 
 Lưu ý: schema.sql XÓA và tạo lại toàn bộ bảng mỗi lần chạy.
 
@@ -75,6 +76,25 @@ Mở http://localhost:8080 và đăng nhập trang quản trị Keycloak. Cổng
 - Mở http://localhost:5173: chưa đăng nhập sẽ được chuyển sang trang đăng nhập Keycloak. Token do keycloak-js giữ trong bộ nhớ,
   web không lưu vào localStorage và tự làm mới token trước mỗi request.
 
+**4. Đăng nhập + đăng ký ngay trong app mobile** (không nhảy sang trang Keycloak; làm một lần):
+App có form email + mật khẩu riêng. Đăng nhập gửi thẳng tới token endpoint của Keycloak (OAuth password grant); đăng ký đi qua
+`POST /api/auth/register` của backend, backend dùng tài khoản dịch vụ của client `hfarm-backend` để tạo người dùng (role `customer`).
+Cấu hình tự động bằng script (cần tên + mật khẩu quản trị Keycloak, Keycloak đang chạy):
+```
+cd backend
+npm run setup:keycloak -- --write-env
+```
+Script hỏi tên và mật khẩu quản trị (mật khẩu không hiện khi gõ, không lưu), rồi: bật "Direct access grants" cho client `hfarm-mobile`, đảm bảo role `customer`,
+tạo client `hfarm-backend` (có tài khoản dịch vụ, chỉ quyền quản lý người dùng + đọc realm) và ghi `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET`
+vào `backend/.env` (bỏ `--write-env` thì chỉ in ra màn hình). Chạy lại nhiều lần an toàn. Sau đó khởi động lại backend.
+- Chưa chạy script (hoặc thiếu hai biến trên): `GET /api/auth/config` trả `registration: false`, app tự dùng trang đăng ký của Keycloak trong trình duyệt như trước.
+- `POST /api/auth/register` body `{ "email", "password", "full_name" }`: kiểm tra dữ liệu (email hợp lệ, mật khẩu 8-128 ký tự, họ tên không có ký tự Keycloak cấm như `< > & " ( )`), giới hạn
+  10 lần / 15 phút / IP (đổi bằng `REGISTER_RATE_LIMIT_MAX`, `REGISTER_RATE_LIMIT_WINDOW_MS`; sau reverse proxy phải đặt `app.set('trust proxy', ...)`). Trả 201, 400 (dữ liệu sai hoặc mật khẩu
+  chưa đạt chính sách của realm), 409 (email đã đăng ký), 429, 503 (chưa cấu hình / không tới được Keycloak; chi tiết kỹ thuật chỉ ghi vào log backend).
+- Mật khẩu không bao giờ nằm trên địa chỉ yêu cầu hay log. Tài khoản tạo từ app có `emailVerified=false`: realm bật bắt buộc xác minh email thì đăng nhập sau đăng ký sẽ báo cần xác minh (app chuyển sang tab Đăng nhập kèm thông báo).
+- "Quên mật khẩu?" trong app mở trang đăng nhập của Keycloak (cần bật Forgot password và cấu hình email của realm); CMS (nhân viên) vẫn đăng nhập qua trang Keycloak.
+- Đã xóa tài khoản ở Keycloak rồi đăng ký lại bằng đúng email cũ: backend báo 409 "Email đã được dùng bởi một tài khoản khác" vì dòng cũ trong bảng `users` vẫn giữ email đó (xóa hoặc đổi email dòng cũ).
+
 **Phân quyền** (backend kiểm tra bằng `requireRole`, giao diện chỉ ẩn thêm cho gọn):
 
 | Chức năng | admin | staff |
@@ -89,7 +109,24 @@ backend không hỏi được Keycloak = `503`. App mobile đăng nhập Keycloa
 (xem `mobile/README.md`); ở chế độ `dev` mobile cần `AUTH_ENABLED=false`. App native không bị ràng buộc bởi CORS.
 
 ## 4. Mobile khách hàng (Expo)
-Xem `mobile/README.md` (cần Node >= 22.13).
+Xem `mobile/README.md` (cần Node >= 22.13). Có tìm kiếm với gợi ý + lịch sử (lưu bằng AsyncStorage, có sẵn trong Expo Go; sau `npm install` hãy chạy lại `npx expo start`).
+
+## 5. Chạy bằng Docker (tùy chọn)
+Cài Docker Desktop rồi ở thư mục gốc chạy:
+```
+docker compose up -d --build
+```
+- CMS: http://localhost:8088 · API: http://localhost:3100 (thử http://localhost:3100/api/products) · MySQL trong Docker: cổng 3307.
+- **MySQL chạy riêng trong container** (volume `hfarm-db`), không dùng MySQL cài trên máy bạn, nên database `clothing_store` của bạn không bị đụng tới
+  và ngược lại. Lần đầu, database trống được nạp từ `database/schema.sql`; sau đó dữ liệu và ảnh tải lên được giữ trong volume (`hfarm-db`, `hfarm-uploads`)
+  qua các lần `docker compose down` / `up`. Bản chạy `npm run dev` bình thường vẫn dùng MySQL của máy qua `backend/.env`, hai bên độc lập.
+- Mặc định là **chế độ dev** (không cần Keycloak): chỉ để chạy thử trên máy mình, vì ai gọi được API cũng có quyền admin. Dùng Keycloak: sao chép `.env.example` thành `.env`,
+  đặt `AUTH_ENABLED=true`, `VITE_AUTH_DISABLED=false` và điền các biến Keycloak (backend trong container cần địa chỉ Keycloak mà container với tới được, ví dụ `http://host.docker.internal:8080`).
+- Đổi cổng, mật khẩu MySQL hoặc `PUBLIC_URL`: sửa `.env` (bản mẫu: `.env.example`). Đổi `PUBLIC_URL` hoặc biến `VITE_*` thì chạy lại `docker compose up -d --build`.
+  Điện thoại cùng Wi-Fi thì đặt `PUBLIC_URL=http://<IP-máy>:3100` và trỏ `EXPO_PUBLIC_API_URL` của app mobile vào `http://<IP-máy>:3100/api`.
+- Sửa mã nguồn xong: `docker compose up -d --build`. Xem log: `docker compose logs -f backend`. Xóa sạch dữ liệu Docker để bắt đầu lại: `docker compose down -v` (không ảnh hưởng MySQL trên máy).
+- Mang dữ liệu từ MySQL của máy sang Docker (lệnh thông dụng, chưa thử trên dữ liệu thật của bạn): `mysqldump -u root -p clothing_store > clothing_store.sql` rồi
+  `docker compose exec -T db mysql -uroot -p<mật-khẩu-DB_PASSWORD> clothing_store < clothing_store.sql`.
 
 ## Các nhóm API
 - Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors
@@ -99,12 +136,22 @@ Xem `mobile/README.md` (cần Node >= 22.13).
     `in_stock=1` (chỉ sản phẩm còn hàng), `sort=newest` (mặc định) | `price_asc` | `price_desc` | `bestseller` (bán chạy, bỏ đơn hủy/hoàn trả),
     `page`, `limit`. `size_id`, `color_id` và `in_stock` phải cùng khớp MỘT biến thể đang bán (chọn size M + màu đen + còn hàng = có biến thể M/đen còn hàng).
     Giá trị sai (id không phải số, giá âm, `sort` lạ...) trả 400 kèm thông báo tiếng Việt. CMS (`/api/admin/products`) dùng chung các tham số này.
-- Khách hàng (cần đăng nhập): /api/me, /api/me/addresses, /api/cart, /api/orders
+    Mỗi sản phẩm trong danh sách có thêm `compare_at_price` (giá gốc của biến thể rẻ nhất, để hiện giá gạch), `rating_avg`, `rating_count`; chi tiết có `rating_avg`, `rating_count`, `sold_count`
+    và các biến thể xếp size chữ trước size số.
+  - `GET /api/products/suggest?q=ao&limit=8`: gợi ý khi gõ ô tìm kiếm, `[{ id, name, price, thumbnail }]` (sản phẩm đang bán). Không phân biệt hoa/thường và dấu; xếp: tên bắt đầu bằng chữ gõ,
+    rồi đầu một từ, rồi chứa ở giữa. `limit` tối đa 20; để trống `q` trả `[]`.
+  - `GET /api/products/:id/related?limit=8`: sản phẩm liên quan (cùng danh mục, còn hàng / cùng thương hiệu / giá gần trước; thiếu thì bổ sung sản phẩm bán chạy).
+  - `GET /api/products/:id/reviews?page=1&limit=5`: đánh giá đã duyệt `{ summary: { count, average, distribution: { 1..5 } }, data: [{ id, rating, comment, created_at, reviewer_name }], page, limit, total }`;
+    `reviewer_name` được che (ví dụ "Nguyễn V. A.").
+- Khách hàng (cần đăng nhập): /api/me, /api/me/addresses, /api/cart, /api/orders, /api/favorites, /api/reviews
+  - Yêu thích: `GET /api/favorites/ids` (mảng id, mới thích trước), `GET /api/favorites?page=&limit=` (sản phẩm đang bán đã thích), `PUT /api/favorites/:productId` (thích, lặp lại vẫn một dòng), `DELETE /api/favorites/:productId`.
+  - Đánh giá: `POST /api/reviews` body `{ "order_item_id": 12, "rating": 5, "comment": "..." }` (nhận xét tối đa 1000 ký tự). Chỉ đánh giá được món trong đơn **Hoàn thành** của chính mình, mỗi món một lần
+    (trùng trả 409); trạng thái đầu là `PENDING`, nhân viên duyệt ở CMS thì mới hiện công khai. `GET /api/orders/:id` có thêm `product_id`, `review_id`, `review_rating`, `review_status` cho mỗi dòng hàng.
   - `POST /api/orders/quote`: body `{ "items": [{ "variant_id": 1, "quantity": 2 }], "coupon_code": "SALE10" }` (cả hai tùy chọn; bỏ `items` = lấy từ giỏ). Trả `{ subtotal, discount_amount, shipping_fee, total_amount }`, dùng chung hàm tính với `POST /api/orders` nên luôn khớp; không ghi DB và không kiểm tra tồn kho. Lỗi (mã sai/hết hạn, đơn tối thiểu, giỏ trống...) trả 400 kèm thông báo tiếng Việt.
   - `POST /api/orders` trả thêm `order_code`.
   - `GET /api/orders?status=&page=&limit=`: đơn của chính người đăng nhập, mới nhất trước. `status` là một trạng thái hoặc nhiều trạng thái cách nhau dấu phẩy (`PENDING`, `CONFIRMED,PROCESSING,SHIPPING`...); giá trị lạ trả 400. Mỗi đơn có thêm `item_count` (số dòng hàng) và `first_product_name`.
   - `GET /api/orders/:id` (chi tiết + lịch sử + thanh toán + vận chuyển) và `POST /api/orders/:id/cancel` (chỉ đơn `PENDING`, hoàn kho).
-- CMS (admin/staff): /api/admin/products, /inventory, /orders, /categories, /brands, /sizes, /colors, /users, /coupons, /stats (xem bảng phân quyền ở mục Keycloak)
+- CMS (admin/staff): /api/admin/products, /inventory, /orders, /reviews, /categories, /brands, /sizes, /colors, /users, /coupons, /stats (xem bảng phân quyền ở mục Keycloak)
 
 ### API CMS bổ sung
 - `GET /api/admin/me`: người đang đăng nhập (admin hoặc staff), trả `{ id, email, full_name, roles }` (`roles` chỉ gồm `admin`/`staff`/`customer`).
@@ -112,4 +159,16 @@ Xem `mobile/README.md` (cần Node >= 22.13).
 - `GET /api/admin/stats/revenue?days=30`: doanh thu và số đơn COMPLETED theo từng ngày (bao gồm ngày không có đơn); `days` từ 1 đến 365.
 - `GET /api/admin/stats`: ngoài các chỉ số hiện có, trả thêm `top_products` (5 sản phẩm có tổng số lượng bán cao nhất, bỏ đơn hủy/hoàn trả).
 - `POST /api/admin/products/:id/variants/bulk`: tạo nhiều biến thể trong một transaction, body `{ "variants": [{ "size_id": 1, "color_id": 1, "sku": "...", "price": 100000, "quantity": 5 }] }` (tối đa 100 biến thể).
+- `GET /api/admin/users?type=CUSTOMER&status=ACTIVE|INACTIVE|BLOCKED&q=&page=&limit=`: danh sách người dùng kèm số đơn và tổng chi tiêu; `status` sai trả 400 ("Trạng thái tài khoản không hợp lệ").
 - `GET /api/admin/users/:id/orders?page=1&limit=10`: lịch sử đơn hàng và các dòng sản phẩm của khách hàng, có phân trang.
+- `GET /api/admin/orders`: `status` nhận một hoặc nhiều trạng thái cách nhau dấu phẩy (`CONFIRMED,PROCESSING`), thêm `payment_status` (`UNPAID`/`PAID`...) và `q` (tìm theo mã đơn, tên, SĐT hoặc mã vận đơn). Mỗi dòng có thêm `payment_method`, `carrier`, `tracking_code`. Giá trị sai trả 400.
+- `GET /api/admin/orders/counts`: số đơn theo từng trạng thái, `{ "PENDING": 3, "CONFIRMED": 0, ... }` (đủ 7 trạng thái), dùng cho các tab của trang Đơn hàng.
+- `POST /api/admin/orders/bulk`: xử lý một hoặc nhiều đơn theo "bước tiếp theo", body `{ "ids": [1, 2], "action": "confirm", "note": "...", "carrier": "...", "tracking_code": "..." }` (tối đa 100 đơn).
+  `action`: `confirm` (Chờ xác nhận → Đã xác nhận), `ship` (Đã xác nhận/Đang xử lý → Đang giao; từ Đã xác nhận tự đi qua Đang xử lý), `complete` (Đang giao → Hoàn thành),
+  `cancel` (→ Đã hủy, hoàn kho), `return` (Đang giao/Hoàn thành → Hoàn trả, hoàn kho). Đơn nào không hợp lệ chỉ báo lỗi riêng trong `results`, các đơn còn lại vẫn được xử lý;
+  trả `{ results: [{ id, order_code, ok, status, tracking_code?, error? }], succeeded, failed }`. `tracking_code` chỉ nhận khi xử lý một đơn.
+- `GET /api/admin/reviews?status=PENDING|APPROVED|REJECTED&rating=&q=&page=&limit=`: danh sách đánh giá kèm sản phẩm, người đánh giá, mã đơn. `GET /api/admin/reviews/counts` trả `{ PENDING, APPROVED, REJECTED }`.
+  `POST /api/admin/reviews/bulk-status` body `{ "ids": [1, 2], "status": "APPROVED" }` (tối đa 100; `REJECTED` = ẩn khỏi cửa hàng), `DELETE /api/admin/reviews/:id`. Cả admin và staff dùng được.
+- **Mã vận đơn tự sinh**: khi chuyển sang Đang giao mà không nhập mã, hệ thống tạo mã duy nhất dạng `HF` + ngày (yyMMdd) + 6 ký tự, ví dụ `HF261118K7M2QP`, và dùng đơn vị vận chuyển mặc định `HFarm Express` (đổi bằng `DEFAULT_CARRIER` trong `backend/.env`). Vẫn nhập tay được; mã nhập tay trùng đơn khác bị từ chối.
+- Công khai: `GET /api/sizes` trả thêm `size_group` (`LETTER` cho XS…XXL/2XL, `NUMBER` cho 28, 30, 38.5…, `OTHER` cho Free size…) và sắp xếp chữ → số → khác (suy ra từ tên size, không cần sửa database).
+  `GET /api/sizes`, `/colors`, `/brands` nhận `?in_use=1` để chỉ trả mục đang có sản phẩm đang bán (bảng lọc ở mobile dùng).

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  App, Avatar, Button, Card, Col, Descriptions, Drawer, Empty, Form, Image, Input, InputNumber,
-  Modal, Radio, Row, Space, Statistic, Table, Tag, Tooltip, Typography,
+  App, Button, Card, Col, Descriptions, Drawer, Empty, Form, Input, InputNumber,
+  Modal, Radio, Row, Space, Table, Tag, Tooltip, Typography,
 } from 'antd';
-import { HistoryOutlined, InboxOutlined } from '@ant-design/icons';
+import {
+  AppstoreOutlined, CloseCircleOutlined, HistoryOutlined, InboxOutlined, PictureOutlined, WarningOutlined,
+} from '@ant-design/icons';
 import api, { errMsg } from '../api';
 import PageHeader from '../components/PageHeader.jsx';
-import { dateTime, money } from '../utils';
+import { dateTime, money, validate } from '../utils';
 
 const movementNames = {
   IMPORT: 'Nhập kho',
@@ -17,35 +19,41 @@ const movementNames = {
 };
 
 function StockTag({ quantity }) {
-  const color = quantity === 0 ? 'red' : quantity <= 5 ? 'orange' : 'green';
-  return <Tag color={color}>{quantity}</Tag>;
+  if (quantity === 0) return <Tag color="red" style={{ marginInlineEnd: 0 }}>Hết hàng</Tag>;
+  return <Tag color={quantity <= 5 ? 'orange' : 'green'} style={{ marginInlineEnd: 0 }}>{quantity}{quantity <= 5 ? ' · sắp hết' : ''}</Tag>;
 }
 
 export default function Inventory() {
   const { message } = App.useApp();
   const [result, setResult] = useState({ data: [], total: 0, stats: {} });
-  const [filters, setFilters] = useState({ q: '', low: '', out: '', page: 1, limit: 10 });
+  const [filters, setFilters] = useState({ q: '', low: '', out: '', page: 1, limit: 20 });
   const [loading, setLoading] = useState(false);
   const [stockItem, setStockItem] = useState(null);
   const [historyItem, setHistoryItem] = useState(null);
   const [movements, setMovements] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [form] = Form.useForm();
+  const seq = useRef(0);
 
   const load = async () => {
+    const mine = ++seq.current;
     setLoading(true);
     try {
       const params = { q: filters.q, page: filters.page, limit: filters.limit };
       if (filters.low) params.low = '1';
       if (filters.out) params.out = '1';
-      setResult((await api.get('/admin/inventory', { params })).data);
+      const res = await api.get('/admin/inventory', { params });
+      if (mine === seq.current) setResult(res.data);
     } catch (e) {
-      message.error(`Không tải được dữ liệu kho: ${errMsg(e)}`);
+      if (mine === seq.current) message.error(`Không tải được dữ liệu kho: ${errMsg(e)}`);
     } finally {
-      setLoading(false);
+      if (mine === seq.current) setLoading(false);
     }
   };
   useEffect(() => { load(); }, [filters]);
+
+  const mode = filters.low ? 'low' : filters.out ? 'out' : 'all';
+  const setMode = (value) => setFilters((current) => ({ ...current, low: value === 'low', out: value === 'out', page: 1 }));
 
   const openStock = (item) => {
     form.resetFields();
@@ -54,7 +62,8 @@ export default function Inventory() {
   };
 
   const saveStock = async () => {
-    const values = await form.validateFields();
+    const values = await validate(form);
+    if (!values) return;
     try {
       await api.post(`/admin/products/variants/${stockItem.variant_id}/stock`, values);
       message.success('Đã cập nhật tồn kho');
@@ -78,25 +87,79 @@ export default function Inventory() {
     }
   };
 
+  const kpis = [
+    { key: 'all', label: 'Tổng số biến thể', value: result.stats.variants ?? 0, icon: <AppstoreOutlined />, tone: 'blue' },
+    { key: 'low', label: 'Sắp hết hàng (≤ 5)', value: result.stats.low_stock ?? 0, icon: <WarningOutlined />, tone: 'orange' },
+    { key: 'out', label: 'Hết hàng', value: result.stats.out_of_stock ?? 0, icon: <CloseCircleOutlined />, tone: 'red' },
+  ];
+
+  const columns = [
+    {
+      title: 'Sản phẩm', dataIndex: 'product_name', width: 320,
+      render: (name, item) => (
+        <div className="review-product">
+          {item.thumbnail
+            ? <img className="review-thumb" src={item.thumbnail} alt="" />
+            : <div className="review-thumb review-thumb-empty"><PictureOutlined /></div>}
+          <div>
+            <Typography.Text strong>{name}</Typography.Text>
+            <div className="cell-sub coupon-code">{item.sku}</div>
+          </div>
+        </div>
+      ),
+    },
+    { title: 'Phiên bản', width: 150, render: (_, item) => <span>{item.size_name} · {item.color_name}</span> },
+    { title: 'Giá bán', dataIndex: 'price', align: 'right', width: 130, render: (v) => <span className="money-strong">{money(v)}</span> },
+    { title: 'Tồn kho', dataIndex: 'stock_quantity', width: 130, render: (quantity) => <StockTag quantity={quantity} /> },
+    {
+      title: 'Trạng thái', dataIndex: 'is_active', width: 120,
+      render: (active) => <Tag color={active ? 'green' : 'default'} style={{ marginInlineEnd: 0 }}>{active ? 'Đang bán' : 'Ngừng bán'}</Tag>,
+    },
+    {
+      title: 'Thao tác', key: 'actions', width: 110, fixed: 'right', align: 'right',
+      render: (_, item) => (
+        <Space className="table-actions" size={2}>
+          <Tooltip title="Nhập / xuất kho">
+            <Button type="text" icon={<InboxOutlined />} aria-label={`Nhập xuất kho ${item.sku}`} onClick={() => openStock(item)} />
+          </Tooltip>
+          <Tooltip title="Lịch sử kho">
+            <Button type="text" icon={<HistoryOutlined />} aria-label={`Lịch sử kho ${item.sku}`} onClick={() => openHistory(item)} />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <>
       <PageHeader title="Kho hàng" description="Theo dõi tồn kho và lịch sử nhập, xuất của từng biến thể." />
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
-        <Col xs={24} sm={8}><Card className="surface-card"><Statistic title="Tổng số biến thể" value={result.stats.variants ?? 0} /></Card></Col>
-        <Col xs={24} sm={8}><Card className="surface-card"><Statistic title="Sắp hết hàng (≤ 5)" value={result.stats.low_stock ?? 0} valueStyle={{ color: '#d48806' }} /></Card></Col>
-        <Col xs={24} sm={8}><Card className="surface-card"><Statistic title="Hết hàng" value={result.stats.out_of_stock ?? 0} valueStyle={{ color: '#cf1322' }} /></Card></Col>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        {kpis.map((k) => (
+          <Col xs={24} sm={8} key={k.key}>
+            <Card className={`surface-card kpi-card${mode === k.key ? ' active' : ''}`} hoverable onClick={() => setMode(k.key)}
+              role="button" aria-label={`Lọc: ${k.label}`}>
+              <div className="todo-body">
+                <span className={`stat-icon stat-${k.tone}`}>{k.icon}</span>
+                <div className="todo-text">
+                  <div className="todo-count">{k.value}</div>
+                  <div className="todo-label">{k.label}</div>
+                </div>
+              </div>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Card className="surface-card">
-        <Space style={{ width: '100%', justifyContent: 'space-between', marginBottom: 16 }} wrap>
+        <div className="filter-row filter-row-top">
           <Input.Search
             placeholder="Tìm tên sản phẩm hoặc SKU"
             allowClear
             style={{ width: 300, maxWidth: '100%' }}
-            onSearch={(q) => setFilters((current) => ({ ...current, q, page: 1 }))}
+            onSearch={(q) => setFilters((current) => ({ ...current, q: q.trim(), page: 1 }))}
           />
           <Radio.Group
-            value={filters.low ? 'low' : filters.out ? 'out' : 'all'}
+            value={mode}
             optionType="button"
             buttonStyle="solid"
             options={[
@@ -104,50 +167,22 @@ export default function Inventory() {
               { label: 'Sắp hết', value: 'low' },
               { label: 'Hết hàng', value: 'out' },
             ]}
-            onChange={({ target: { value } }) => setFilters((current) => ({
-              ...current, low: value === 'low', out: value === 'out', page: 1,
-            }))}
+            onChange={({ target: { value } }) => setMode(value)}
           />
-        </Space>
+          <span className="filter-meta">{result.total} biến thể</span>
+        </div>
         <Table
           className="data-table"
           rowKey="variant_id"
           loading={loading}
           dataSource={result.data}
+          columns={columns}
           scroll={{ x: 900 }}
           pagination={{
-            current: filters.page, pageSize: filters.limit, total: result.total,
-            showSizeChanger: false, onChange: (page) => setFilters((current) => ({ ...current, page })),
+            current: filters.page, pageSize: filters.limit, total: result.total, showSizeChanger: true, pageSizeOptions: [20, 50, 100],
+            onChange: (page, limit) => setFilters((current) => ({ ...current, page: limit !== current.limit ? 1 : page, limit })),
           }}
           locale={{ emptyText: <Empty description="Chưa có biến thể phù hợp" /> }}
-          columns={[
-            { title: 'Sản phẩm', dataIndex: 'product_name', render: (name, item) => (
-              <Space>
-                {item.thumbnail
-                  ? <Image src={item.thumbnail} width={42} height={52} style={{ objectFit: 'cover', borderRadius: 6 }} />
-                  : <Avatar shape="square" icon={<InboxOutlined />} />}
-                <Typography.Text strong>{name}</Typography.Text>
-              </Space>
-            ) },
-            { title: 'SKU', dataIndex: 'sku' },
-            { title: 'Size', dataIndex: 'size_name' },
-            { title: 'Màu', dataIndex: 'color_name' },
-            { title: 'Giá bán', dataIndex: 'price', render: money },
-            { title: 'Tồn kho', dataIndex: 'stock_quantity', width: 100, render: (quantity) => <StockTag quantity={quantity} /> },
-            { title: 'Trạng thái', dataIndex: 'is_active', render: (active) => (
-              <Tag color={active ? 'green' : 'default'}>{active ? 'Đang bán' : 'Ngừng bán'}</Tag>
-            ) },
-            { title: 'Thao tác', width: 110, fixed: 'right', render: (_, item) => (
-              <Space className="table-actions" size={4}>
-                <Tooltip title="Nhập / xuất kho">
-                  <Button type="text" icon={<InboxOutlined />} aria-label="Nhập xuất kho" onClick={() => openStock(item)} />
-                </Tooltip>
-                <Tooltip title="Lịch sử kho">
-                  <Button type="text" icon={<HistoryOutlined />} aria-label="Lịch sử kho" onClick={() => openHistory(item)} />
-                </Tooltip>
-              </Space>
-            ) },
-          ]}
         />
       </Card>
 
@@ -159,6 +194,7 @@ export default function Inventory() {
         onOk={saveStock}
         onCancel={() => setStockItem(null)}
         destroyOnHidden
+        forceRender
       >
         {stockItem && <Typography.Paragraph type="secondary">
           {stockItem.product_name} · {stockItem.size_name} / {stockItem.color_name} · Hiện có {stockItem.stock_quantity}
@@ -199,6 +235,7 @@ export default function Inventory() {
         {historyItem && <Descriptions size="small" column={1} style={{ marginBottom: 18 }}>
           <Descriptions.Item label="Sản phẩm">{historyItem.product_name}</Descriptions.Item>
           <Descriptions.Item label="Biến thể">{historyItem.sku} · {historyItem.size_name} / {historyItem.color_name}</Descriptions.Item>
+          <Descriptions.Item label="Tồn hiện tại"><StockTag quantity={historyItem.stock_quantity} /></Descriptions.Item>
         </Descriptions>}
         <Table
           className="data-table"

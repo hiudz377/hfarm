@@ -9,5 +9,8 @@ export const orderKey = (id) => ['order', String(id)]; // chi tiết 1 đơn
 export const PRODUCTS_KEY = ['products'];
 export const PRODUCT_KEY = ['product']; // ['product', id]
 
+export const FAVORITES_KEY = ['favorites']; // ['favorites', 'ids'] (mảng id) và ['favorites', 'list'] (danh sách phân trang)
+export const reviewsKey = (productId) => ['reviews', String(productId)];
+
 // Dữ liệu riêng của người dùng đang đăng nhập: bị xóa khi phiên đổi để không lộ dữ liệu của người trước
-export const PRIVATE_QUERY_KEYS = [CART_KEY, QUOTE_KEY, ADDRESSES_KEY, ME_KEY, ORDERS_KEY, ['order']];
+export const PRIVATE_QUERY_KEYS = [CART_KEY, QUOTE_KEY, ADDRESSES_KEY, ME_KEY, ORDERS_KEY, ['order'], FAVORITES_KEY];

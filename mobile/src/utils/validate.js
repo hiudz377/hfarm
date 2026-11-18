@@ -11,7 +11,41 @@ export function normalizePhone(raw) {
 // Số di động VN: 10 số, đầu 03x / 05x / 07x / 08x / 09x
 export const isValidVnPhone = (raw) => /^0[35789]\d{8}$/.test(normalizePhone(raw));
 
-export const ADDRESS_FIELDS = ['recipient_name', 'phone', 'province', 'district', 'ward', 'address_detail'];
+// ---- Đăng nhập / đăng ký (khớp với kiểm tra ở backend/src/routes/auth.js) ----
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// Keycloak không nhận các ký tự này trong họ tên
+const NAME_BAD_CHARS = /[<>&"$%!#?§;*~/\\|^=[\]{}()]/;
+
+export const isValidEmail = (value) => {
+  const s = String(value ?? '').trim();
+  return s.length > 0 && s.length <= 190 && EMAIL_RE.test(s);
+};
+
+export function validateSignIn({ email, password }) {
+  const errors = {};
+  if (!String(email ?? '').trim()) errors.email = 'Vui lòng nhập email';
+  else if (!isValidEmail(email)) errors.email = 'Email không hợp lệ';
+  if (!password) errors.password = 'Vui lòng nhập mật khẩu';
+  return errors;
+}
+
+export function validateSignUp({ fullName, email, password, confirm }) {
+  const errors = {};
+  const name = String(fullName ?? '').trim().replace(/\s+/g, ' ');
+  if (!name) errors.fullName = 'Vui lòng nhập họ tên';
+  else if (name.length > 150) errors.fullName = 'Họ tên tối đa 150 ký tự';
+  else if (NAME_BAD_CHARS.test(name)) errors.fullName = 'Họ tên không được chứa ký tự đặc biệt như < > & " ( ) ; * = ?';
+  if (!String(email ?? '').trim()) errors.email = 'Vui lòng nhập email';
+  else if (!isValidEmail(email)) errors.email = 'Email không hợp lệ';
+  const pw = String(password ?? '');
+  if (!pw) errors.password = 'Vui lòng nhập mật khẩu';
+  else if (pw.length < 8) errors.password = 'Mật khẩu cần ít nhất 8 ký tự';
+  else if (pw.length > 128) errors.password = 'Mật khẩu tối đa 128 ký tự';
+  if (!errors.password && pw !== String(confirm ?? '')) errors.confirm = 'Mật khẩu nhập lại không khớp';
+  return errors;
+}
+
+export const ADDRESS_FIELDS =['recipient_name', 'phone', 'province', 'district', 'ward', 'address_detail'];
 
 // Độ dài tối đa theo cột trong database/schema.sql (addresses)
 const MAX = { recipient_name: 150, province: 100, district: 100, ward: 100, address_detail: 255 };

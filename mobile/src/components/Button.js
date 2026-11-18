@@ -9,6 +9,7 @@ export default function Button({ title, onPress, variant = 'primary', loading = 
     <Pressable
       onPress={onPress}
       disabled={off}
+      role="button"
       style={({ pressed }) => [styles.base, styles[variant], off && styles.off, pressed && styles.pressed, style]}
     >
       {loading ? <ActivityIndicator color={fg} /> : <Text style={[styles.text, { color: fg }]}>{title}</Text>}

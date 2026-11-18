@@ -82,12 +82,14 @@ cho thanh nút cố định; ảnh luôn đi qua `Photo` (expo-image); thông b�
   địa chỉ mới nhất còn lại được chuyển làm mặc định.
 - **Đăng xuất ở chế độ dev** không có phiên thật để xóa: nút chỉ làm mới dữ liệu tạm trong app và báo rõ như vậy.
 ## Đăng nhập với Keycloak
-Chế độ `keycloak` thay đăng nhập dev bằng đăng nhập thật: **Authorization Code + PKCE (S256)** qua trình duyệt hệ thống
-(Chrome Custom Tabs trên Android, ASWebAuthenticationSession trên iOS). App không bao giờ thấy mật khẩu.
+Chế độ `keycloak` thay đăng nhập dev bằng đăng nhập thật. **Đăng nhập và đăng ký diễn ra ngay trong app** (form email + mật khẩu), không nhảy sang trình duyệt:
+đăng nhập gửi thẳng tới token endpoint của Keycloak (password grant, cần bật Direct access grants cho client `hfarm-mobile`), đăng ký đi qua `POST /api/auth/register` của backend rồi tự đăng nhập.
+Cả hai bước cấu hình bằng một lệnh: `cd backend` rồi `npm run setup:keycloak -- --write-env` (xem README gốc, mục Keycloak bước 4).
+Chưa chạy script thì app tự dùng luồng trình duyệt cũ (**Authorization Code + PKCE (S256)** qua Chrome Custom Tabs / ASWebAuthenticationSession), cũng là luồng dự phòng và dùng cho "Quên mật khẩu?".
 - **Xem sản phẩm tự do** khi chưa đăng nhập. Thêm vào giỏ, thanh toán, tab Đơn hàng và Tài khoản yêu cầu đăng nhập
   (các tab hiện màn đăng nhập thay vì gọi API; màn thanh toán / đơn / địa chỉ bị chặn nếu mở bằng liên kết khi chưa đăng nhập).
-- **Đăng nhập** / **Tạo tài khoản**: nút sau gửi `prompt=create` để Keycloak mở thẳng trang đăng ký (Keycloak >= 26.1; discovery
-  của realm có `prompt_values_supported` chứa `create`). Người tự đăng ký được Keycloak gán role mặc định (ví dụ `customer`).
+- **Đăng nhập** / **Tạo tài khoản**: mở màn `/login` với form trong app (tab Đăng nhập / Đăng ký, hiện/ẩn mật khẩu, kiểm tra dữ liệu ngay trên máy, thông báo lỗi tiếng Việt). Tài khoản tạo từ app được gán role `customer`.
+  Luồng trình duyệt dự phòng (nút "Đăng nhập bằng trình duyệt" khi client chưa bật Direct access grants, "Tạo tài khoản bằng trình duyệt" khi backend chưa bật đăng ký trong app) dùng `prompt=create` (Keycloak >= 26.1).
 - **Token**: access token chỉ nằm trong bộ nhớ; **refresh token** lưu bằng `expo-secure-store` (Keychain / Keystore) nên mở lại app
   vẫn đăng nhập. Access token tự làm mới khi còn dưới 30 giây. Backend trả 401 thì app làm mới cưỡng bức và gửi lại đúng một lần;
   vẫn lỗi (hoặc Keycloak từ chối refresh token) thì xóa phiên và về màn Đăng nhập kèm thông báo "Phiên đăng nhập đã hết hạn".

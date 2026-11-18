@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import api, { errMsg } from '../api';
-import { money, PRODUCT_STATUS } from '../utils';
+import { money, PRODUCT_STATUS, validate } from '../utils';
 
 const normalizeSkuPart = (value) => String(value)
   .normalize('NFD')
@@ -83,7 +83,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   }, [quickModal, product?.base_price]);
 
   const saveInfo = async () => {
-    const values = await infoForm.validateFields();
+    const values = await validate(infoForm);
+    if (!values) return;
     if (imageList.some((image) => image.status === 'uploading')) {
       message.warning('Vui lòng đợi tải ảnh hoàn tất trước khi lưu.');
       return;
@@ -109,7 +110,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   };
 
   const saveVariant = async () => {
-    const values = await variantForm.validateFields();
+    const values = await validate(variantForm);
+    if (!values) return;
     try {
       if (variantModal.id) await api.put(`/admin/products/variants/${variantModal.id}`, values);
       else await api.post(`/admin/products/${id}/variants`, values);
@@ -126,7 +128,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   };
 
   const saveStock = async () => {
-    const values = await stockForm.validateFields();
+    const values = await validate(stockForm);
+    if (!values) return;
     try {
       await api.post(`/admin/products/variants/${stockModal.id}/stock`, values);
       message.success('Đã cập nhật kho');
@@ -148,7 +151,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   };
 
   const generateQuickVariants = async () => {
-    const values = await quickForm.validateFields();
+    const values = await validate(quickForm);
+    if (!values) return;
     const count = values.size_ids.length * values.color_ids.length;
     if (count > 100) {
       message.error('Mỗi lần chỉ có thể tạo tối đa 100 biến thể.');
@@ -234,21 +238,21 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
       <Form.Item name="name" label="Tên sản phẩm" rules={[{ required: true, message: 'Bắt buộc nhập' }]}>
         <Input />
       </Form.Item>
-      <Space style={{ width: '100%' }} size="middle" wrap>
+      <div className="form-grid-3">
         <Form.Item name="category_id" label="Danh mục" rules={[{ required: true, message: 'Chọn danh mục' }]}>
-          <Select style={{ width: 200 }} options={meta.categories.map((c) => ({ value: c.id, label: c.name }))} />
+          <Select style={{ width: '100%' }} options={meta.categories.map((c) => ({ value: c.id, label: c.name }))} />
         </Form.Item>
         <Form.Item name="brand_id" label="Thương hiệu">
-          <Select allowClear style={{ width: 200 }} options={meta.brands.map((b) => ({ value: b.id, label: b.name }))} />
+          <Select allowClear style={{ width: '100%' }} options={meta.brands.map((b) => ({ value: b.id, label: b.name }))} />
         </Form.Item>
         <Form.Item name="base_price" label="Giá gốc (₫)" rules={[{ required: true }]}>
-          <InputNumber min={0} step={1000} style={{ width: 160 }} />
+          <InputNumber min={0} step={1000} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="status" label="Trạng thái">
-          <Select style={{ width: 140 }}
+          <Select style={{ width: '100%' }}
             options={Object.entries(PRODUCT_STATUS).map(([value, v]) => ({ value, label: v.text }))} />
         </Form.Item>
-      </Space>
+      </div>
       <Form.Item name="description" label="Mô tả"><Input.TextArea rows={4} /></Form.Item>
       <Form.Item label="Ảnh sản phẩm (ảnh đầu tiên là ảnh chính)">
         <Upload
@@ -295,7 +299,6 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
           <Image src={previewImage} style={{ width: '100%' }} />
         </Modal>
       )}
-      <Button type="primary" onClick={saveInfo}>{id ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</Button>
     </Form>
   );
 
@@ -309,7 +312,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
         columns={[
           { title: 'SKU', dataIndex: 'sku' },
           { title: 'Size', dataIndex: 'size_name' },
-          { title: 'Màu', dataIndex: 'color_name' },
+          { title: 'Màu', dataIndex: 'color_name', render: (name, v) => (<span><span className="color-dot-sm" style={{ backgroundColor: v.hex_code || '#fff' }} />{name}</span>) },
           { title: 'Giá', dataIndex: 'price', render: money },
           { title: 'Tồn kho', dataIndex: 'stock',
             render: (s) => <Tag color={s === 0 ? 'red' : s <= 5 ? 'orange' : 'green'}>{s}</Tag> },
@@ -329,7 +332,18 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
 
   return (
     <Drawer open={open} onClose={onClose} width={760} destroyOnClose
-      title={id ? `Sản phẩm #${id}` : 'Thêm sản phẩm'}>
+      title={id ? (
+        <Space>
+          <span>{product?.name || `Sản phẩm #${id}`}</span>
+          {product && <Tag color={PRODUCT_STATUS[product.status]?.color} style={{ marginInlineEnd: 0 }}>{PRODUCT_STATUS[product.status]?.text}</Tag>}
+        </Space>
+      ) : 'Thêm sản phẩm'}
+      footer={tab === 'info' ? (
+        <div className="drawer-footer">
+          <Button onClick={onClose}>Đóng</Button>
+          <Button type="primary" onClick={saveInfo}>{id ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</Button>
+        </div>
+      ) : null}>
       <Tabs activeKey={tab} onChange={setTab} items={[
         { key: 'info', label: 'Thông tin', children: infoTab },
         { key: 'variants', label: 'Biến thể & kho', disabled: !id, children: variantsTab },

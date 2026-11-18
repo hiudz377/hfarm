@@ -2,6 +2,7 @@ import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import { KEYCLOAK_CLIENT_ID, KEYCLOAK_ISSUER } from '@/utils/config';
 import { clearRefreshToken, loadRefreshToken, saveRefreshToken } from './storage';
+import { isConfigErrorCode, passwordGrantMessage } from './passwordErrors';
 
 // Lõi đăng nhập Keycloak: Authorization Code + PKCE (S256) qua trình duyệt hệ thống, không có React ở đây.
 // AuthProvider (React) chỉ gọi các hàm bên dưới và lắng nghe sự kiện qua subscribe().
@@ -213,6 +214,40 @@ export async function signIn({ create = false } = {}) {
   return { status: 'signedIn' };
 }
 
+// Đăng nhập bằng email + mật khẩu NGAY TRONG APP (không mở trình duyệt): gửi thẳng tới token endpoint của Keycloak
+// (OAuth password grant). Cần bật "Direct access grants" cho client hfarm-mobile (chạy `npm run setup:keycloak` ở backend).
+// Trả { status: 'signedIn' }. Lỗi: AuthError('denied', ..., 'invalid_grant') khi sai thông tin / tài khoản bị khóa,
+// AuthError('config', ..., 'unauthorized_client') khi client chưa bật Direct access grants, AuthError('network') khi mất kết nối.
+export async function signInWithPassword({ email, password }) {
+  const discovery = await getDiscovery();
+  let res;
+  try {
+    res = await withTimeout(fetch(discovery.tokenEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'password',
+        client_id: KEYCLOAK_CLIENT_ID,
+        username: String(email).trim(),
+        password,
+        scope: SCOPES.join(' '),
+      }).toString(),
+    }));
+  } catch (e) {
+    throw asNetworkError(e);
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.access_token) {
+    const code = data?.error;
+    const description = data?.error_description;
+    if (!code) throw new AuthError('network', `Keycloak trả về lỗi ${res.status}`); // 5xx / phản hồi lạ: coi là lỗi tạm thời
+    throw new AuthError(isConfigErrorCode(code) ? 'config' : 'denied', description || code, code);
+  }
+  applyTokens({ accessToken: data.access_token, refreshToken: data.refresh_token, expiresIn: data.expires_in }, null);
+  emit({ type: 'signedIn', userId: session.userId });
+  return { status: 'signedIn' };
+}
+
 // Xóa phiên cục bộ ngay (giao diện đổi tức thì) rồi kết thúc phiên ở Keycloak. Dùng đăng xuất trực tiếp
 // (POST end_session_endpoint kèm refresh_token): phiên ở Keycloak bị hủy nên cookie đăng nhập trong trình duyệt
 // cũng vô hiệu, không cần mở trình duyệt và không cần khai "post logout redirect URI". Lỗi mạng thì bỏ qua:
@@ -238,6 +273,8 @@ export function authErrorMessage(e) {
   if (e?.kind === 'network') return `Không kết nối được máy chủ đăng nhập. Kiểm tra mạng rồi thử lại.${hint}`;
   if (e?.kind === 'config') return `Cấu hình đăng nhập chưa đúng. Vui lòng liên hệ cửa hàng.${__DEV__ ? ` [dev] ${e.message}` : ''}`;
   if (e?.kind === 'denied') {
+    const viet = passwordGrantMessage(e.code, e.message); // đăng nhập bằng mật khẩu: sai thông tin, tài khoản khóa...
+    if (viet) return viet;
     return e.code === 'access_denied'
       ? 'Đăng nhập bị từ chối.'
       : `Đăng nhập không thành công${e.code ? ` (${e.code})` : ''}. Vui lòng thử lại.${__DEV__ && e.message ? ` [dev] ${e.message}` : ''}`;

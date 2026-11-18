@@ -11,8 +11,30 @@ import { colors, radius, space } from '@/utils/theme';
 
 const STALE = 5 * 60 * 1000;
 
-// Một nhóm tùy chọn lấy từ API (size / màu / thương hiệu): tự xử lý đang tải, lỗi + thử lại, danh sách trống
-function Group({ title, query, children }) {
+const SIZE_GROUPS = [
+  { key: 'LETTER', label: 'Size chữ' },
+  { key: 'NUMBER', label: 'Size số' },
+  { key: 'OTHER', label: 'Khác' },
+];
+
+// Size chữ (S, M, XL...) và size số (28, 40...) tách thành hai cụm; chỉ hiện tiêu đề cụm khi có từ hai cụm trở lên
+function SizeChips({ list, selected, onToggle }) {
+  const groups = SIZE_GROUPS.map((g) => ({ ...g, items: list.filter((s) => s.size_group === g.key) })).filter((g) => g.items.length);
+  return groups.map((g) => (
+    <View key={g.key} style={styles.sizeGroup}>
+      {groups.length > 1 ? <Text style={styles.subTitle}>{g.label}</Text> : null}
+      <View style={styles.wrap}>
+        {g.items.map((s) => (
+          <Chip key={s.id} label={s.name} selected={selected.includes(s.id)} onPress={() => onToggle(s.id)} />
+        ))}
+      </View>
+    </View>
+  ));
+}
+
+// Một nhóm tùy chọn lấy từ API (size / màu / thương hiệu): tự xử lý đang tải, lỗi + thử lại, danh sách trống.
+// column: các phần tử con tự xếp hàng riêng (dùng cho size chia cụm)
+function Group({ title, query, column = false, children }) {
   if (!query.isPending && !query.isError && !query.data?.length) return null;
   let body;
   if (query.isPending) {
@@ -24,7 +46,7 @@ function Group({ title, query, children }) {
       </Pressable>
     );
   } else {
-    body = <View style={styles.wrap}>{children(query.data)}</View>;
+    body = <View style={column ? styles.column : styles.wrap}>{children(query.data)}</View>;
   }
   return (
     <View style={styles.group}>
@@ -85,10 +107,10 @@ export default function FilterSheet({ visible, value, onApply, onClose }) {
               </View>
             </View>
 
-            <Group title="Size" query={sizes}>
-              {(list) => list.map((s) => (
-                <Chip key={s.id} label={s.name} selected={draft.sizeIds.includes(s.id)} onPress={() => set({ sizeIds: toggleId(draft.sizeIds, s.id) })} />
-              ))}
+            <Group title="Size" query={sizes} column>
+              {(list) => (
+                <SizeChips list={list} selected={draft.sizeIds} onToggle={(id) => set({ sizeIds: toggleId(draft.sizeIds, id) })} />
+              )}
             </Group>
 
             <Group title="Màu sắc" query={colorList}>
@@ -156,6 +178,9 @@ const styles = StyleSheet.create({
   group: { gap: space.sm },
   groupTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  column: { gap: space.md },
+  sizeGroup: { gap: space.xs },
+  subTitle: { fontSize: 12, color: colors.muted },
   loading: { alignSelf: 'flex-start' },
   retry: { color: colors.primary, fontSize: 14 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },

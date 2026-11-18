@@ -1,9 +1,17 @@
+const crypto = require('crypto');
 const db = require('../db');
 const { httpError, tx } = require('../utils');
 const { changeStock } = require('./stock');
 
 const SHIPPING_FEE = 30000;
 const FREE_SHIP_OVER = 500000;
+// Đơn vị vận chuyển mặc định khi nhân viên không nhập (đặt DEFAULT_CARRIER trong .env để đổi)
+const DEFAULT_CARRIER = process.env.DEFAULT_CARRIER || 'HFarm Express';
+
+const STATUS_LABEL = {
+  PENDING: 'Chờ xác nhận', CONFIRMED: 'Đã xác nhận', PROCESSING: 'Đang xử lý', SHIPPING: 'Đang giao',
+  COMPLETED: 'Hoàn thành', CANCELLED: 'Đã hủy', RETURNED: 'Hoàn trả',
+};
 
 // Các bước chuyển trạng thái được phép
 const TRANSITIONS = {
@@ -20,6 +28,23 @@ const newOrderCode = () => {
   const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   return `HT${d}${Math.floor(10000 + Math.random() * 90000)}`;
 };
+
+// Mã vận đơn tự sinh: HF + ngày (yyMMdd) + 6 ký tự ngẫu nhiên, bỏ các ký tự dễ nhầm (I, O, 0, 1). Ví dụ HF261118K7M2QP.
+// conn: connection trong transaction. Kiểm tra trùng trước; cột tracking_code còn có UNIQUE KEY chặn lần cuối.
+const TRACKING_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+async function generateTrackingCode(conn) {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const day = `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    let suffix = '';
+    for (let i = 0; i < 6; i++) suffix += TRACKING_ALPHABET[crypto.randomInt(TRACKING_ALPHABET.length)];
+    const code = `HF${day}${suffix}`;
+    const [rows] = await conn.query('SELECT 1 FROM shipments WHERE tracking_code = ? LIMIT 1', [code]);
+    if (!rows.length) return code;
+  }
+  throw httpError(500, 'Không tạo được mã vận đơn, hãy thử lại');
+}
 
 async function loadCart(userId) {
   const [carts] = await db.query("SELECT id FROM carts WHERE user_id = ? AND status = 'ACTIVE' LIMIT 1", [userId]);
@@ -131,18 +156,42 @@ async function createOrder(userId, body) {
   const method = ['COD', 'BANK_TRANSFER', 'ONLINE'].includes(body.payment_method) ? body.payment_method : 'COD';
 
   return tx(async (conn) => {
-    const { subtotal, detailed } = await priceLines(conn, lines);
+    // Đặt từ giỏ: khóa dòng giỏ rồi đọc lại hàng trong giỏ ngay trong transaction. Hai yêu cầu cùng lúc cho một giỏ
+    // (bấm đúp, mạng chập chờn gửi lại...) sẽ xếp hàng: yêu cầu thứ hai thấy giỏ đã CONVERTED nên bị từ chối,
+    // không tạo đơn thứ hai và không trừ kho lần nữa.
+    let orderLines = lines;
+    if (cartId) {
+      const [cart] = await conn.query('SELECT status FROM carts WHERE id = ? FOR UPDATE', [cartId]);
+      if (!cart.length || cart[0].status !== 'ACTIVE') throw httpError(400, 'Giỏ hàng trống');
+      const [fresh] = await conn.query('SELECT variant_id, quantity FROM cart_items WHERE cart_id = ?', [cartId]);
+      if (!fresh.length) throw httpError(400, 'Giỏ hàng trống');
+      orderLines = mergeLines(fresh);
+    }
+
+    const { subtotal, detailed } = await priceLines(conn, orderLines);
     const { coupon, discount } = await applyCoupon(conn, { code: body.coupon_code, subtotal, userId, forUpdate: true });
     const { shipping_fee: shippingFee, total_amount: total } = computeTotals(subtotal, discount);
 
-    const orderCode = newOrderCode();
-    const [o] = await conn.query(
-      `INSERT INTO orders (order_code, user_id, recipient_name, recipient_phone, province, district, ward,
-         shipping_address, subtotal, discount_amount, shipping_fee, total_amount, coupon_id, customer_note)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [orderCode, userId, addr.name, addr.phone, addr.province, addr.district, addr.ward, addr.detail,
-       subtotal, discount, shippingFee, total, coupon ? coupon.id : null, body.customer_note || null]);
-    const orderId = o.insertId;
+    // Mã đơn có phần ngẫu nhiên nên hiếm khi trùng: trùng thì tự thử mã khác (lỗi trùng khóa chỉ hủy câu INSERT đó,
+    // transaction vẫn tiếp tục) thay vì báo lỗi cho khách.
+    let orderCode;
+    let orderId;
+    for (let attempt = 1; ; attempt++) {
+      orderCode = newOrderCode();
+      try {
+        const [o] = await conn.query(
+          `INSERT INTO orders (order_code, user_id, recipient_name, recipient_phone, province, district, ward,
+             shipping_address, subtotal, discount_amount, shipping_fee, total_amount, coupon_id, customer_note)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [orderCode, userId, addr.name, addr.phone, addr.province, addr.district, addr.ward, addr.detail,
+           subtotal, discount, shippingFee, total, coupon ? coupon.id : null, body.customer_note || null]);
+        orderId = o.insertId;
+        break;
+      } catch (e) {
+        const dupCode = e.code === 'ER_DUP_ENTRY' && /uq_orders_code|order_code/.test(e.sqlMessage || e.message || '');
+        if (!dupCode || attempt >= 5) throw e;
+      }
+    }
 
     for (const { v, qty } of detailed) {
       await conn.query(
@@ -177,7 +226,8 @@ async function changeOrderStatus(orderId, newStatus, userId, note, opts = {}) {
     if (!order) throw httpError(404, 'Không tìm thấy đơn hàng');
     if (opts.ownerOnlyUserId && order.user_id !== opts.ownerOnlyUserId) throw httpError(403, 'Không đủ quyền');
     if (!(TRANSITIONS[order.status] || []).includes(newStatus))
-      throw httpError(400, `Không thể chuyển từ ${order.status} sang ${newStatus}`);
+      throw httpError(400, `Không thể chuyển từ "${STATUS_LABEL[order.status] || order.status}" sang "${STATUS_LABEL[newStatus] || newStatus}"`);
+    let trackingCode = null;
 
     if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
       const [items] = await conn.query(
@@ -194,12 +244,22 @@ async function changeOrderStatus(orderId, newStatus, userId, note, opts = {}) {
     }
     if (newStatus === 'CONFIRMED') await conn.query('UPDATE orders SET confirmed_by = ? WHERE id = ?', [userId, orderId]);
     if (newStatus === 'SHIPPING') {
+      // Nhân viên có thể nhập tay; để trống thì hệ thống tự tạo mã vận đơn (duy nhất) và dùng đơn vị vận chuyển mặc định
+      const typed = opts.tracking_code == null ? '' : String(opts.tracking_code).trim();
+      if (typed.length > 150) throw httpError(400, 'Mã vận đơn tối đa 150 ký tự');
+      if (typed) {
+        const [dup] = await conn.query('SELECT 1 FROM shipments WHERE tracking_code = ? AND order_id <> ? LIMIT 1', [typed, orderId]);
+        if (dup.length) throw httpError(400, 'Mã vận đơn này đã được dùng cho đơn khác');
+      }
+      trackingCode = typed || await generateTrackingCode(conn);
+      const carrier = (opts.carrier == null ? '' : String(opts.carrier).trim()) || DEFAULT_CARRIER;
+      if (carrier.length > 100) throw httpError(400, 'Tên đơn vị vận chuyển tối đa 100 ký tự');
       await conn.query(
         `INSERT INTO shipments (order_id, carrier, tracking_code, status, shipping_fee, shipped_at)
          VALUES (?,?,?, 'IN_TRANSIT', ?, NOW())
          ON DUPLICATE KEY UPDATE carrier = VALUES(carrier), tracking_code = VALUES(tracking_code),
            status = 'IN_TRANSIT', shipped_at = NOW()`,
-        [orderId, opts.carrier || null, opts.tracking_code || null, order.shipping_fee]);
+        [orderId, carrier, trackingCode, order.shipping_fee]);
     }
     if (newStatus === 'COMPLETED') {
       await conn.query("UPDATE shipments SET status = 'DELIVERED', delivered_at = NOW() WHERE order_id = ?", [orderId]);
@@ -213,8 +273,68 @@ async function changeOrderStatus(orderId, newStatus, userId, note, opts = {}) {
     await conn.query(
       'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status, note) VALUES (?,?,?,?,?)',
       [orderId, userId, order.status, newStatus, note || null]);
-    return { status: newStatus };
+    return { status: newStatus, tracking_code: trackingCode };
   });
+}
+
+// ---- Xử lý nhiều đơn một lần (CMS) ----
+// Mỗi thao tác = "bước tiếp theo" của đơn. 'ship' từ CONFIRMED đi qua PROCESSING rồi SHIPPING để nhân viên chỉ cần một cú bấm.
+const BULK_ACTIONS = {
+  confirm: { verb: 'xác nhận', from: ['PENDING'], path: () => ['CONFIRMED'] },
+  ship: { verb: 'giao hàng', from: ['CONFIRMED', 'PROCESSING'], path: (s) => (s === 'CONFIRMED' ? ['PROCESSING', 'SHIPPING'] : ['SHIPPING']) },
+  complete: { verb: 'hoàn tất', from: ['SHIPPING'], path: () => ['COMPLETED'] },
+  cancel: { verb: 'hủy', from: ['PENDING', 'CONFIRMED', 'PROCESSING'], path: () => ['CANCELLED'] },
+  return: { verb: 'hoàn trả', from: ['SHIPPING', 'COMPLETED'], path: () => ['RETURNED'] },
+};
+const MAX_BULK = 100;
+
+// Xử lý lần lượt từng đơn, đơn nào lỗi thì ghi lại rồi đi tiếp (không dừng cả lô).
+// Trả { results: [{ id, order_code, ok, status, tracking_code?, error? }], succeeded, failed }.
+async function bulkOrderAction(rawIds, action, userId, { note, carrier, tracking_code } = {}) {
+  const def = Object.hasOwn(BULK_ACTIONS, action) ? BULK_ACTIONS[action] : null;
+  if (!def) throw httpError(400, 'Thao tác không hợp lệ');
+  if (!Array.isArray(rawIds) || !rawIds.length) throw httpError(400, 'Chưa chọn đơn hàng nào');
+  const ids = [...new Set(rawIds.map((v) => (typeof v === 'number' || /^\d+$/.test(String(v)) ? Number(v) : NaN)))];
+  if (ids.some((id) => !Number.isSafeInteger(id) || id < 1)) throw httpError(400, 'Mã đơn hàng không hợp lệ');
+  if (ids.length > MAX_BULK) throw httpError(400, `Chỉ xử lý tối đa ${MAX_BULK} đơn mỗi lần`);
+  if (String(tracking_code ?? '').trim() && ids.length > 1) throw httpError(400, 'Chỉ nhập mã vận đơn khi xử lý một đơn');
+
+  const [rows] = await db.query('SELECT id, order_code, status FROM orders WHERE id IN (?)', [ids]);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const results = [];
+  for (const id of ids) {
+    const order = byId.get(id);
+    if (!order) { results.push({ id, ok: false, error: 'Không tìm thấy đơn hàng' }); continue; }
+    if (!def.from.includes(order.status)) {
+      results.push({ id, order_code: order.order_code, ok: false, status: order.status,
+        error: `Đơn đang ở trạng thái "${STATUS_LABEL[order.status]}" nên không thể ${def.verb}` });
+      continue;
+    }
+    let current = order.status;
+    let trackingOut = null;
+    try {
+      for (const next of def.path(order.status)) {
+        const r = await changeOrderStatus(id, next, userId, note, { carrier, tracking_code });
+        current = next;
+        if (r.tracking_code) trackingOut = r.tracking_code;
+      }
+      results.push({ id, order_code: order.order_code, ok: true, status: current, tracking_code: trackingOut });
+    } catch (e) {
+      if (!e.status) console.error(e);
+      results.push({ id, order_code: order.order_code, ok: false, status: current,
+        error: e.status ? e.message : 'Lỗi hệ thống, hãy thử lại' });
+    }
+  }
+  const succeeded = results.filter((r) => r.ok).length;
+  return { results, succeeded, failed: results.length - succeeded };
+}
+
+// Số đơn theo từng trạng thái (đủ cả trạng thái có 0 đơn), dùng cho các tab của trang Đơn hàng
+async function orderCounts() {
+  const [rows] = await db.query('SELECT status, COUNT(*) AS n FROM orders GROUP BY status');
+  const counts = Object.fromEntries(Object.keys(TRANSITIONS).map((s) => [s, 0]));
+  for (const r of rows) counts[r.status] = Number(r.n);
+  return counts;
 }
 
 async function getOrderDetail(orderId, ownerId = null) {
@@ -223,7 +343,13 @@ async function getOrderDetail(orderId, ownerId = null) {
      FROM orders o JOIN users u ON u.id = o.user_id WHERE o.id = ?`, [orderId]);
   const order = rows[0];
   if (!order || (ownerId && order.user_id !== ownerId)) throw httpError(404, 'Không tìm thấy đơn hàng');
-  const [items] = await db.query('SELECT * FROM order_items WHERE order_id = ?', [orderId]);
+  // Kèm product_id (mở lại trang sản phẩm) và đánh giá đã gửi cho dòng hàng này (nếu có)
+  const [items] = await db.query(
+    `SELECT oi.*, pv.product_id, r.id AS review_id, r.rating AS review_rating, r.status AS review_status
+     FROM order_items oi
+     LEFT JOIN product_variants pv ON pv.id = oi.variant_id
+     LEFT JOIN reviews r ON r.order_item_id = oi.id
+     WHERE oi.order_id = ? ORDER BY oi.id`, [orderId]);
   const [history] = await db.query(
     `SELECT h.*, u.full_name AS changed_by_name FROM order_status_history h
      LEFT JOIN users u ON u.id = h.changed_by WHERE h.order_id = ? ORDER BY h.id`, [orderId]);
@@ -232,4 +358,7 @@ async function getOrderDetail(orderId, ownerId = null) {
   return { ...order, items, history, payment: payments[0] || null, shipment: shipments[0] || null };
 }
 
-module.exports = { createOrder, quoteOrder, changeOrderStatus, getOrderDetail, TRANSITIONS };
+module.exports = {
+  createOrder, quoteOrder, changeOrderStatus, getOrderDetail, bulkOrderAction, orderCounts, generateTrackingCode,
+  TRANSITIONS, STATUS_LABEL,
+};

@@ -99,6 +99,58 @@ body {
 .surface-card { border: 1px solid #e9eee9; box-shadow: 0 2px 10px rgba(27, 55, 30, .035); }
 .data-table .ant-table-tbody > tr:hover > td { background: #f5faf5 !important; }
 .table-actions .ant-btn { color: #617062; }
+.orders-card .ant-card-body { padding-top: 8px; }
+.tab-count {
+  display: inline-block;
+  min-width: 22px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 11px;
+  background: #eef2ee;
+  color: #5d6a5e;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.ant-tabs-tab-active .tab-count { background: #e3f1e4; color: #2e7d32; }
+.tab-count.urgent { background: #ed8b00; color: #fff; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 16px; }
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid #cfe5d0;
+  border-radius: 8px;
+  background: #f0f8f0;
+}
+.bulk-count { color: #1d3020; font-weight: 600; }
+.order-code { font-variant-numeric: tabular-nums; }
+.cell-sub { margin-top: 2px; color: #7a867b; font-size: 12px; }
+.tracking-line { font-family: Consolas, "Courier New", monospace; letter-spacing: .3px; }
+.pay-paid { color: #2e7d32; }
+.pay-unpaid { color: #c77700; }
+.kpi-sub { margin-top: 8px; color: #7a867b; font-size: 12px; min-height: 18px; }
+.todo-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
+.todo-card:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(27, 55, 30, .08); }
+.todo-body { display: flex; align-items: center; gap: 14px; }
+.todo-text { flex: 1; min-width: 0; }
+.todo-count { font-size: 24px; font-weight: 700; line-height: 1.1; color: #1d3020; }
+.todo-label { color: #6a776b; font-size: 13px; }
+.todo-arrow { color: #a3ada4; font-size: 12px; }
+.stat-red { color: #d32f2f; background: #fdecea; }
+.filter-row-top { margin-top: 4px; }
+.rating-star { color: #f5a623; }
+.review-product { display: flex; align-items: center; gap: 12px; }
+.review-thumb { flex: 0 0 auto; width: 44px; height: 56px; border-radius: 6px; object-fit: cover; background: #eef1ee; }
+.review-thumb-empty { display: flex; align-items: center; justify-content: center; color: #b4bdb4; font-size: 18px; }
+.review-stars { font-size: 14px; }
+.review-comment { margin: 6px 0 0 !important; max-width: 520px; }
+.cell-sub-inline { color: #7a867b; font-size: 13px; }
+.action-panel { margin-bottom: 20px; padding: 14px; border: 1px solid #e9eee9; border-radius: 10px; background: #fafcfa; }
 .color-swatch { display: inline-block; width: 22px; height: 22px; border: 1px solid #d9e0d9; border-radius: 6px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .form-grid .ant-form-item { min-width: 0; }
@@ -131,4 +183,89 @@ body {
   .page-title { font-size: 23px !important; }
   .form-grid { grid-template-columns: 1fr; gap: 0; }
   .dashboard-chart { height: 260px; }
+}
+
+/* ===== Đợt làm đẹp: bảng, nhãn, thẻ, bố cục ===== */
+.ant-tag { border-color: transparent !important; font-weight: 500; }
+.data-table .ant-table-thead > tr > th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #6a776b;
+}
+.data-table .ant-table-tbody > tr > td { padding-block: 14px; }
+.data-table .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
+.person-cell { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.person-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
+.person-name { max-width: 240px; }
+.person-sub { max-width: 240px; font-size: 12.5px; }
+.money-strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+.muted-dash { color: #b3bcb3; }
+
+.mini-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.mini-stat { padding: 12px 14px; border: 1px solid #e9eee9; border-radius: 10px; background: #fafcfa; }
+.mini-stat-label { color: #7a867b; font-size: 12px; }
+.mini-stat-value { margin-top: 2px; color: #1d3020; font-size: 18px; font-weight: 700; }
+.drawer-person { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+
+.filter-meta { margin-left: auto; align-self: center; color: #7a867b; font-size: 13px; }
+.kpi-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.kpi-card:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(27, 55, 30, .08); }
+.kpi-card.active { border-color: #2e7d32; box-shadow: 0 0 0 1px #2e7d32 inset; }
+
+.coupon-code { font-family: Consolas, "Courier New", monospace; letter-spacing: .5px; }
+.discount-pill { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #e8f5e9; color: #1b5e20; font-weight: 700; font-size: 13px; }
+.discount-pill.fixed { background: #e8f1fb; color: #0d47a1; }
+.coupon-usage { min-width: 130px; }
+.coupon-usage .ant-progress { margin: 0; line-height: 1; }
+
+.attr-section { margin-bottom: 22px; }
+.attr-section-title { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; color: #1d3020; font-weight: 600; }
+.attr-section-hint { color: #8a958b; font-weight: 400; font-size: 12.5px; }
+.attr-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.attr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px 4px 14px;
+  border: 1px solid #dfe6df;
+  border-radius: 999px;
+  background: #fff;
+  font-weight: 600;
+}
+.attr-chip .ant-btn { color: #7a867b; }
+.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.color-card { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border: 1px solid #e9eee9; border-radius: 12px; background: #fff; }
+.color-dot { flex: 0 0 auto; width: 38px; height: 38px; border: 1px solid #d9e0d9; border-radius: 50%; }
+.color-text { flex: 1; min-width: 0; }
+.color-name { font-weight: 600; }
+
+.header-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.header-right { display: flex; align-items: center; gap: 6px; }
+.header-trigger { width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: #4a574b; font-size: 18px; cursor: pointer; }
+.header-trigger:hover, .header-trigger:focus-visible { background: #f1f6f1; }
+.bell-btn { position: relative; width: 38px; height: 38px; border: 0; border-radius: 8px; background: transparent; color: #4a574b; font-size: 18px; cursor: pointer; }
+.bell-btn:hover, .bell-btn:focus-visible { background: #f1f6f1; }
+.bell-item { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-width: 250px; }
+.bell-item b { color: #1d3020; }
+.ant-layout-sider-collapsed .brand-copy { display: none; }
+.ant-layout-sider-collapsed .brand-lockup { justify-content: center; padding: 0; }
+.drawer-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.form-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
+.form-grid-3 .span-3 { grid-column: 1 / -1; }
+@media (max-width: 767px) {
+  .form-grid-3 { grid-template-columns: 1fr; }
+  .mini-stats { grid-template-columns: 1fr; }
+  .person-name, .person-sub { max-width: 170px; }
+}
+.color-dot-sm { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 1px solid #d9e0d9; border-radius: 50%; vertical-align: -1px; }
+
+/* Menu thu gọn: tiêu đề nhóm đổi thành vạch kẻ mảnh, không để chữ bị cắt ("BÁN H…") */
+.ant-layout-sider-collapsed .admin-menu .ant-menu-item-group-title { height: 1px !important; margin: 12px 18px !important; padding: 0 !important; overflow: hidden; font-size: 0 !important; line-height: 0 !important; background: rgba(255, 255, 255, 0.14); }
+/* Điện thoại: tiêu đề trang đã nằm ngay dưới header nên bỏ breadcrumb, chỉ giữ ảnh đại diện tài khoản */
+@media (max-width: 767px) {
+  .admin-header .ant-breadcrumb { display: none; }
+  .header-user-text, .header-user-caret { display: none; }
+  .header-user { max-width: none; }
 }
