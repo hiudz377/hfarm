@@ -2,7 +2,7 @@
 
 Quy ước: `[x]` = đã viết xong và đã kiểm tra tự động (xem "Mức kiểm tra GĐ1", "GĐ2", "GĐ3" bên dưới); `[ ]` = chưa làm.
 **Chưa có mục nào được thử trên điện thoại / Expo Go** - cần bạn thử tay theo `README.md`.
-Chưa làm Keycloak: chỉ chừa chỗ (`TODO(keycloak)` trong `src/auth/AuthProvider.js` và `src/api/client.js`).
+Keycloak đã được gắn (đăng nhập + đăng ký ngay trong app: xem mục 4.11 và `README.md`; chế độ `dev` vẫn dùng được). **Chưa** chạy `npm run setup:keycloak` trên Keycloak thật của chủ dự án và chưa thử đăng nhập trên điện thoại thật. Các ghi chú "chưa làm Keycloak" ở phần mô tả từng giai đoạn bên dưới là lịch sử lúc đó. Bức tranh hiện tại: `../docs/STATUS.md`.
 
 ## Giai đoạn 1 - Khung + Cửa hàng + Chi tiết
 
@@ -62,11 +62,11 @@ Mobile:
 - Không có lần ghi nào vào database thật `clothing_store`; chưa có lần chạy với dữ liệu thật của bạn.
 - Lưu ý còn đó từ GĐ1: nhãn thanh tab có thể bị cụt phần dưới chữ (thấy trên web, chưa biết trên native).
 
-### Phát hiện về backend (chưa sửa, ngoài phạm vi "không đổi hành vi đặt hàng")
-- `POST /orders` không có khóa/idempotency: giỏ được đọc **ngoài** transaction, hai yêu cầu song song cho cùng giỏ về lý thuyết có thể tạo 2 đơn (trong lần thử của tôi yêu cầu thứ hai nhận "Giỏ hàng trống", nhưng đó là may rủi về thời điểm). App chặn bấm đúp và, khi mất kết nối giữa chừng, tự kiểm tra giỏ trước khi cho đặt lại.
-- Mã đơn `HT<ngày><5 chữ số ngẫu nhiên>` có thể trùng (rất hiếm) -> khách thấy "Dữ liệu bị trùng (ví dụ SKU, tên, mã)".
-- `POST /me/addresses` báo thiếu trường bằng tên cột tiếng Anh ("Thiếu recipient_name"); app đã kiểm tra trước nên không gặp. Chưa Việt hóa vì GĐ3 yêu cầu backend chỉ đổi `GET /orders`.
-- Mã giảm giá không phân biệt hoa/thường (do collation MySQL): `sale10` vẫn được chấp nhận.
+### Phát hiện về backend (lúc làm GĐ2; trạng thái hiện tại ghi ở từng dòng)
+- ~~`POST /orders` không có khóa/idempotency~~ **Đã xử lý ở mục 4.10**: `createOrder` khóa dòng giỏ trong transaction, đọc lại hàng trong giỏ và chỉ nhận giỏ còn `ACTIVE`; bấm đặt hai lần chỉ tạo một đơn (12/12 lần thử). Còn lại: đặt bằng `items` trong body (không qua giỏ) vẫn không có khóa chống gửi trùng (app luôn đặt từ giỏ). App vẫn giữ lớp chặn bấm đúp và tự kiểm tra giỏ khi mất kết nối giữa chừng.
+- ~~Mã đơn `HT<ngày><5 chữ số ngẫu nhiên>` có thể trùng~~ **Đã xử lý ở mục 4.10**: trùng `order_code` thì tự thử mã khác (tối đa 5 lần), khách không còn thấy lỗi 409.
+- `POST /me/addresses` báo thiếu trường bằng tên cột tiếng Anh ("Thiếu recipient_name"); app đã kiểm tra trước nên không gặp. **Chưa xử lý** (cũng gặp ở `POST /admin/coupons`: "Thiếu code"...).
+- Mã giảm giá không phân biệt hoa/thường (do collation MySQL): `sale10` vẫn được chấp nhận. Hành vi hiện tại, chưa có quyết định đổi.
 
 ## Giai đoạn 3 - Đơn hàng + Tài khoản
 
@@ -200,7 +200,7 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 
 ## Giả định và việc cần quyết định sau
 
-- Dữ liệu: `database/seed.sql` mà README gốc nhắc **không có trong repo**, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.
+- Dữ liệu: repo không có dữ liệu mẫu sản phẩm, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.
 - Ảnh: backend lưu URL ảnh theo `PUBLIC_URL` (mặc định `http://localhost:3000`). App tự đổi `localhost` sang host của `EXPO_PUBLIC_API_URL`.
 - GĐ2 - mã giảm giá (đã giải quyết): thêm `POST /orders/quote`; mã được truyền từ giỏ sang thanh toán bằng tham số route `?coupon=` và **luôn được kiểm tra lại** ở thanh toán và ở `POST /orders`. Mã được lưu trong state của màn Giỏ (không lưu bền): thoát app thì phải nhập lại.
 - GĐ2 - phí ship (đã giải quyết): app không còn hằng số phí ship; luôn lấy `shipping_fee` / `total_amount` từ `/orders/quote` (30.000 ₫, miễn phí từ 500.000 ₫ nằm trong `backend/src/services/orders.js`).

@@ -44,21 +44,37 @@ Sửa `.env` xong phải chạy lại với cache sạch: `npx expo start --clea
 ## Cấu trúc
 ```
 src/app/         màn hình (Expo Router)
-  (tabs)/        4 tab: index (cửa hàng), cart, orders, account
-  product/[id]   chi tiết sản phẩm          order/[id]   chi tiết đơn hàng
+  (tabs)/        4 tab: index (cửa hàng: tìm kiếm + bộ lọc), cart, orders, account
+  product/[id]   chi tiết sản phẩm (ảnh, đánh giá, sản phẩm liên quan, chia sẻ)    order/[id]   chi tiết đơn hàng
   checkout       thanh toán                 order-success  đặt hàng thành công
   login          Đăng nhập / Tạo tài khoản (modal; cũng là đích của redirect URI)
   profile        sửa họ tên / SĐT           addresses    sổ địa chỉ
   address-form   thêm / sửa địa chỉ (modal; ?id= để sửa, ?from=checkout khi mở từ thanh toán)
-src/api/         client.js (axios duy nhất), products, cart, orders (quote, đặt, danh sách, chi tiết, hủy), addresses, me
+  favorites      Yêu thích: sản phẩm đã thả tim (mở từ tab Tài khoản; bỏ tim thì thẻ biến mất ngay)
+  review         Đánh giá sản phẩm (modal): chọn sao + nhận xét cho một món trong đơn Hoàn thành
+                 (mở từ nút "Đánh giá sản phẩm" ở order/[id]; đánh giá ở trạng thái chờ duyệt cho tới khi CMS duyệt)
+src/api/         client.js (axios duy nhất), products (danh sách, gợi ý, liên quan, danh mục/size/màu/thương hiệu), cart,
+                 orders (quote, đặt, danh sách, chi tiết, hủy), addresses, me, favorites, reviews, auth (cấu hình + đăng ký trong app)
 src/auth/        AuthProvider (React: trạng thái đăng nhập), keycloak.js (lõi OAuth: đăng nhập, làm mới token, đăng xuất),
-                 storage.js (lưu refresh token bằng expo-secure-store)
-src/components/  LoginPanel (màn Đăng nhập / Tạo tài khoản), Button, Card, Chip, EmptyState, Loading, Photo (expo-image), Field, KeyboardView, QuantityStepper,
-                 ProductCard, CartItemRow, PriceSummary, BankInfo, OrderCard, StatusBadge, Timeline, MenuRow, AddressCard
+                 storage.js (lưu refresh token bằng expo-secure-store), passwordErrors.js (lỗi đăng nhập bằng mật khẩu -> tiếng Việt)
+src/components/  LoginPanel (lời mời đăng nhập), LoginForm (form Đăng nhập / Đăng ký trong app), Button, Card, Chip, EmptyState, Loading,
+                 Photo (expo-image), Field, KeyboardView, QuantityStepper, ProductCard, CartItemRow, PriceSummary, BankInfo,
+                 OrderCard, StatusBadge, Timeline, MenuRow, AddressCard
+  Bộ lọc        FilterSheet: bảng lọc + sắp xếp trượt từ dưới lên (sắp xếp, khoảng giá, size chữ / size số, màu, thương hiệu, "chỉ còn hàng");
+                 chỉnh trên bản nháp, bấm "Áp dụng" mới đổi danh sách
+  Tìm kiếm      SearchOverlay: lớp hiện khi vào ô tìm kiếm ("Tìm kiếm gần đây" + "Phổ biến" khi chưa gõ; gợi ý sản phẩm khi đang gõ)
+  Yêu thích     FavoriteButton (trái tim trên thẻ và ảnh sản phẩm)
+  Đánh giá      Stars (hiển thị / chọn số sao), ReviewSection (điểm trung bình + phân bố + danh sách), RelatedProducts (dải "Sản phẩm liên quan")
 src/utils/       config, theme, format (tiền, ngày, ảnh), queryKeys (khóa React Query dùng chung), useCart (giỏ + làm mới
                  sau đặt/hủy), useRefresh (làm mới khi focus, kéo để làm mới), useDebounce, validate (địa chỉ, hồ sơ, SĐT VN),
-                 orderStatus (nhãn + màu + bộ lọc), payment, bankConfig, nav
+                 orderStatus (nhãn + màu + bộ lọc), payment, bankConfig (thông tin chuyển khoản GIẢ), nav, viMessage (lỗi backend -> tiếng Việt),
+                 useMounted, useFavorites (danh sách id đã thích, cập nhật lạc quan),
+                 productFilters (trạng thái bộ lọc + sắp xếp, thuần JS), searchHistory + searchTerms (lịch sử tìm kiếm lưu bằng AsyncStorage, tô đậm chữ khớp)
 ```
+
+Cách dùng bộ lọc và tìm kiếm (màn Cửa hàng):
+- **Tìm kiếm**: chạm ô tìm kiếm để mở lớp gợi ý; danh sách chỉ lọc khi bấm Enter, chọn một gợi ý hoặc chọn từ lịch sử (không lọc ngay khi gõ). Gợi ý gọi `GET /api/products/suggest`, lịch sử (tối đa 8 từ khóa) lưu trên máy bằng `@react-native-async-storage/async-storage`.
+- **Bộ lọc**: nút "Lọc và sắp xếp" mở `FilterSheet`; gọi `GET /api/products` với `sort`, `min_price`/`max_price`, `size_id`, `color_id`, `brand_id`, `in_stock`. Danh sách size/màu/thương hiệu lấy bằng `?in_use=1` để chỉ hiện mục đang có hàng bán.
 
 Quy ước chung của mọi màn: có trạng thái **loading**, **lỗi (nút "Thử lại")** và **trống**; màn có ô nhập bọc trong
 `KeyboardView` (bắt buộc có `behavior` ở cả iOS lẫn Android vì Expo mặc định edge-to-edge) và cộng `insets.bottom`
