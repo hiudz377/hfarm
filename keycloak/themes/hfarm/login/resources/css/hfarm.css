@@ -1,0 +1,380 @@
+/*
+ * Giao diện đăng nhập HFarm (đè lên theme keycloak.v2 / PatternFly 5).
+ * Màu lấy từ mobile/src/utils/theme.js: xanh rừng đậm, nền kem ấm, chữ gần đen.
+ * Chỉ ghi đè biến màu + vài selector của Keycloak; không cần sửa file .ftl nào.
+ */
+
+:root {
+  --hf-primary: #1e5b3a;
+  --hf-primary-dark: #14432a;
+  --hf-primary-soft: #e8f0ea;
+  --hf-bg: #f7f6f2;
+  --hf-surface: #ffffff;
+  --hf-text: #17201a;
+  --hf-muted: #6c756e;
+  --hf-border: #dcdfd8;
+  --hf-danger: #c0392b;
+  --hf-danger-soft: #fbeae7;
+  --hf-radius: 20px;
+  --hf-radius-input: 10px;
+
+  /* Biến của PatternFly: nút chính, liên kết, viền khi focus đều đổi sang màu thương hiệu */
+  --pf-v5-global--primary-color--100: var(--hf-primary);
+  --pf-v5-global--primary-color--200: var(--hf-primary-dark);
+  --pf-v5-global--active-color--100: var(--hf-primary);
+  --pf-v5-global--link--Color: var(--hf-primary);
+  --pf-v5-global--link--Color--hover: var(--hf-primary-dark);
+  --pf-v5-global--link--Color--light: var(--hf-primary);
+  --pf-v5-global--link--Color--light--hover: var(--hf-primary-dark);
+  --pf-v5-global--danger-color--100: var(--hf-danger);
+  --pf-v5-global--FontFamily--text: "Segoe UI", "Helvetica Neue", Roboto, Arial, system-ui, sans-serif;
+  --pf-v5-global--FontFamily--heading: var(--pf-v5-global--FontFamily--text);
+  --pf-v5-global--FontFamily--sans-serif: var(--pf-v5-global--FontFamily--text);
+
+  /* Dải màu trên cùng của thẻ (mặc định xanh dương của Keycloak) */
+  --keycloak-card-top-color: transparent;
+}
+
+/* ---------- Nền: nửa trên xanh rừng bo cong, nửa dưới kem ---------- */
+.login-pf body {
+  background: var(--hf-bg);
+  color: var(--hf-text);
+  font-family: var(--pf-v5-global--FontFamily--text);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.login-pf body::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 340px;
+  z-index: 0;
+  background:
+    radial-gradient(520px 260px at 82% 8%, rgba(165, 214, 167, 0.28), transparent 70%),
+    radial-gradient(420px 220px at 8% 92%, rgba(165, 214, 167, 0.16), transparent 70%),
+    linear-gradient(160deg, var(--hf-primary) 0%, var(--hf-primary-dark) 100%);
+  border-bottom-left-radius: 50% 56px;
+  border-bottom-right-radius: 50% 56px;
+}
+
+.login-pf body > .pf-v5-c-login {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+/* ---------- Khung: một cột, rộng vừa, co lại trên điện thoại ---------- */
+.pf-v5-c-login {
+  /* Trang ngắn (lỗi, đăng xuất) không bị căn giữa dọc: logo luôn nằm trong dải xanh phía trên */
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.pf-v5-c-login__container {
+  grid-template-columns: minmax(0, 30rem);
+  justify-content: center;
+  align-content: start;
+  max-width: 100%;
+  padding-inline: 16px;
+}
+
+/* ---------- Logo + tên thương hiệu ---------- */
+.pf-v5-c-login__header {
+  margin-block: 44px 28px;
+  padding-inline: 0;
+}
+
+#kc-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  line-height: 1.1;
+  text-transform: none;
+  color: #ffffff !important;
+}
+
+#kc-header-wrapper::before {
+  content: "";
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: url("../img/logo.svg") center / contain no-repeat;
+  box-shadow: 0 8px 20px rgba(10, 40, 24, 0.35);
+}
+
+/* ---------- Thẻ đăng nhập ---------- */
+.pf-v5-c-login__main {
+  --pf-v5-c-login__main--BackgroundColor: var(--hf-surface);
+  --pf-v5-c-login__main--BoxShadow: 0 18px 50px rgba(20, 67, 42, 0.16), 0 2px 6px rgba(20, 67, 42, 0.08);
+  border-radius: var(--hf-radius);
+  overflow: hidden;
+  margin-block-end: 24px;
+}
+
+.pf-v5-c-login__main-header {
+  border-top: 0;
+  padding-top: 36px;
+  padding-bottom: 8px;
+}
+
+.pf-v5-c-login__main-header .pf-v5-c-title,
+#kc-page-title {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--hf-text);
+  letter-spacing: -0.2px;
+}
+
+.pf-v5-c-login__main-body {
+  padding-bottom: 28px;
+}
+
+/* Đoạn chữ của trang lỗi / đăng xuất / thông tin */
+p.instruction {
+  margin: 0 0 18px;
+  line-height: 1.55;
+  color: var(--hf-text);
+}
+
+/* ---------- Ô nhập liệu ---------- */
+.pf-v5-c-form__label-text {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--hf-text);
+}
+
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--before--BorderTopColor: var(--hf-border);
+  --pf-v5-c-form-control--before--BorderRightColor: var(--hf-border);
+  --pf-v5-c-form-control--before--BorderLeftColor: var(--hf-border);
+  --pf-v5-c-form-control--before--BorderBottomWidth: 1px;
+  --pf-v5-c-form-control--before--BorderBottomColor: var(--hf-border);
+  --pf-v5-c-form-control--after--BorderBottomWidth: 0;
+  --pf-v5-c-form-control--focus--after--BorderBottomWidth: 0;
+  --pf-v5-c-form-control--BackgroundColor: #ffffff;
+  --pf-v5-c-form-control--PaddingTop: 11px;
+  --pf-v5-c-form-control--PaddingBottom: 11px;
+  --pf-v5-c-form-control--PaddingLeft: 14px;
+  --pf-v5-c-form-control--FontSize: 15px;
+  border-radius: var(--hf-radius-input);
+  transition: box-shadow 0.15s ease;
+}
+
+.pf-v5-c-form-control::before {
+  border-radius: var(--hf-radius-input);
+  transition: border-color 0.15s ease;
+}
+
+.pf-v5-c-form-control:hover::before {
+  border-color: #b9c2bb;
+}
+
+.pf-v5-c-form-control:focus-within {
+  box-shadow: 0 0 0 3px rgba(30, 91, 58, 0.18);
+}
+
+.pf-v5-c-form-control:focus-within::before {
+  border-color: var(--hf-primary);
+}
+
+.pf-v5-c-form-control::after {
+  display: none;
+}
+
+/* Trình duyệt tự vẽ viền đen quanh ô đang focus: bỏ nó, vòng sáng xanh của khung bên ngoài đã báo focus */
+.pf-v5-c-form-control input:focus,
+.pf-v5-c-form-control input:focus-visible,
+.pf-v5-c-form-control select:focus,
+.pf-v5-c-form-control select:focus-visible {
+  outline: none;
+}
+
+/* Ô mật khẩu + nút con mắt (và ô tên đăng nhập + nút "đăng nhập lại"): gộp thành MỘT khung */
+.pf-v5-c-input-group {
+  --pf-v5-c-input-group__item--MarginLeft: 0;
+  position: relative;
+  background: #ffffff;
+  border: 1px solid var(--hf-border);
+  border-radius: var(--hf-radius-input);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pf-v5-c-input-group:hover {
+  border-color: #b9c2bb;
+}
+
+.pf-v5-c-input-group:focus-within {
+  border-color: var(--hf-primary);
+  box-shadow: 0 0 0 3px rgba(30, 91, 58, 0.18);
+}
+
+.pf-v5-c-input-group .pf-v5-c-form-control {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.pf-v5-c-input-group .pf-v5-c-form-control::before {
+  border: 0;
+}
+
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+  --pf-v5-c-button--m-control--after--BorderWidth: 0;
+  --pf-v5-c-button--m-control--BackgroundColor: transparent;
+  --pf-v5-c-button--m-control--Color: var(--hf-muted);
+  border-radius: 0 calc(var(--hf-radius-input) - 1px) calc(var(--hf-radius-input) - 1px) 0;
+}
+
+/* Ô bị khóa (tên đăng nhập ở bước nhập mật khẩu) */
+.pf-v5-c-form-control.pf-m-readonly {
+  --pf-v5-c-form-control--BackgroundColor: var(--hf-primary-soft);
+}
+
+/* Ô nhập có lỗi */
+.pf-v5-c-form-control[aria-invalid="true"]::before,
+.pf-v5-c-form-control:has(input[aria-invalid="true"])::before {
+  border-color: var(--hf-danger);
+}
+
+/* ---------- Nút ---------- */
+.pf-v5-c-button {
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--hf-primary);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--hf-primary-dark);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--hf-primary-dark);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--hf-primary-dark);
+  --pf-v5-c-button--PaddingTop: 13px;
+  --pf-v5-c-button--PaddingBottom: 13px;
+  --pf-v5-c-button--FontSize: 16px;
+  box-shadow: 0 6px 16px rgba(30, 91, 58, 0.28);
+  transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+
+.pf-v5-c-button.pf-m-primary:hover {
+  box-shadow: 0 8px 20px rgba(20, 67, 42, 0.34);
+}
+
+.pf-v5-c-button.pf-m-primary:active {
+  transform: translateY(1px);
+}
+
+.pf-v5-c-button.pf-m-secondary {
+  --pf-v5-c-button--m-secondary--Color: var(--hf-primary);
+  --pf-v5-c-button--m-secondary--BorderColor: var(--hf-primary);
+  --pf-v5-c-button--m-secondary--hover--Color: var(--hf-primary-dark);
+  --pf-v5-c-button--m-secondary--hover--BorderColor: var(--hf-primary-dark);
+  --pf-v5-c-button--m-secondary--focus--Color: var(--hf-primary-dark);
+  --pf-v5-c-button--m-secondary--focus--BorderColor: var(--hf-primary-dark);
+  --pf-v5-c-button--m-secondary--active--Color: var(--hf-primary-dark);
+  --pf-v5-c-button--m-secondary--active--BorderColor: var(--hf-primary-dark);
+}
+
+.pf-v5-c-button.pf-m-secondary::after {
+  border-radius: 12px;
+}
+
+/* ---------- Ghi nhớ / quên mật khẩu, liên kết ---------- */
+.pf-v5-c-check__input:checked {
+  accent-color: var(--hf-primary);
+}
+
+.pf-v5-c-check__label {
+  color: var(--hf-text);
+}
+
+a {
+  font-weight: 600;
+}
+
+/* Khung "Chưa có tài khoản? Đăng ký" ở cuối thẻ (Keycloak mặc định cắt mất padding dưới của nó) */
+.pf-v5-c-login__main-footer-band,
+.pf-v5-c-login__main-footer-band:first-child,
+.pf-v5-c-login__main-footer-band:last-child {
+  background: var(--hf-primary-soft);
+  border-top: 0;
+  border-radius: 12px;
+  color: var(--hf-text);
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.pf-v5-c-login__main-footer-band-item {
+  padding: 0;
+}
+
+hr {
+  border-color: var(--hf-border);
+}
+
+/* ---------- Thông báo (lỗi, thành công, cảnh báo) ---------- */
+.pf-v5-c-alert {
+  border-radius: 12px;
+  --pf-v5-c-alert--BoxShadow: none;
+  --pf-v5-c-alert--BorderTopWidth: 0;
+}
+
+.pf-v5-c-alert.pf-m-danger {
+  background: var(--hf-danger-soft);
+  --pf-v5-c-alert--m-danger__icon--Color: var(--hf-danger);
+  --pf-v5-c-alert--m-danger__title--Color: #8f2a20;
+  border: 1px solid #f1c9c3;
+}
+
+.pf-v5-c-alert.pf-m-success {
+  background: var(--hf-primary-soft);
+  --pf-v5-c-alert--m-success__icon--Color: var(--hf-primary);
+  --pf-v5-c-alert--m-success__title--Color: var(--hf-primary-dark);
+  border: 1px solid #cfe0d3;
+}
+
+.pf-v5-c-helper-text__item.pf-m-error,
+.pf-v5-c-helper-text__item-text.pf-m-error {
+  color: var(--hf-danger);
+}
+
+/* ---------- Chọn ngôn ngữ ---------- */
+#login-select-toggle {
+  border-radius: var(--hf-radius-input);
+  color: var(--hf-text);
+}
+
+/* ---------- Điện thoại ---------- */
+@media (max-width: 575px) {
+  .pf-v5-c-login__container {
+    padding-inline: 12px;
+  }
+
+  .pf-v5-c-login__header {
+    margin-block: 28px 20px;
+  }
+
+  .login-pf body::before {
+    height: 300px;
+  }
+
+  .pf-v5-c-login__main-header {
+    padding: 28px 20px 4px;
+  }
+
+  .pf-v5-c-login__main-body {
+    padding-inline: 20px;
+    padding-bottom: 24px;
+  }
+}
+
+/* Tôn trọng người dùng tắt hiệu ứng chuyển động */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
