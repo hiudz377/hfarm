@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Suspense } from 'react';
 import { App, Avatar, Badge, Breadcrumb, Dropdown, Layout, Menu, Skeleton, Typography } from 'antd';
 import {
-  AppstoreOutlined, BellOutlined, DashboardOutlined, DownOutlined, GiftOutlined, InboxOutlined, LogoutOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, SkinOutlined, ShoppingCartOutlined, StarOutlined, TagsOutlined, TeamOutlined,
-  UserOutlined, WarningOutlined,
+  AppstoreOutlined, BankOutlined, BellOutlined, CarOutlined, DashboardOutlined, DownOutlined, GiftOutlined, InboxOutlined,
+  LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PictureOutlined, SkinOutlined, ShoppingCartOutlined, StarOutlined,
+  TagsOutlined, TeamOutlined, UserOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api';
@@ -27,6 +27,9 @@ const menuItems = [
   ] },
   { type: 'group', label: 'Vận hành', children: [
     { key: '/inventory', icon: <InboxOutlined />, label: 'Kho hàng' },
+    { key: '/shipping', icon: <CarOutlined />, label: 'Vận chuyển' },
+    { key: '/bank-transactions', icon: <BankOutlined />, label: 'Giao dịch ngân hàng' },
+    { key: '/banners', icon: <PictureOutlined />, label: 'Banner', adminOnly: true },
   ] },
 ];
 
@@ -41,6 +44,9 @@ const pageNames = {
   '/customers': 'Khách hàng',
   '/coupons': 'Mã giảm giá',
   '/inventory': 'Kho hàng',
+  '/shipping': 'Vận chuyển',
+  '/bank-transactions': 'Giao dịch ngân hàng',
+  '/banners': 'Banner',
 };
 
 function BrandMark() {
@@ -61,6 +67,7 @@ export default function AdminLayout() {
   const [pendingOrders, setPendingOrders] = useState(0);
   const [pendingReviews, setPendingReviews] = useState(0);
   const [lowStock, setLowStock] = useState(0);
+  const [bankTodo, setBankTodo] = useState(0);
   // Thanh bên thu gọn: nhớ lựa chọn của người dùng (tự thu gọn trên màn hình hẹp, không lưu)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('hfarm.sider.collapsed') === '1'; } catch { return false; }
@@ -96,7 +103,14 @@ export default function AdminLayout() {
         if (active) setLowStock(Number(response.data.stats?.low_stock || 0));
       } catch { /* bỏ qua */ }
     };
-    const refresh = () => { loadPendingOrders(); loadPendingReviews(); loadLowStock(); };
+    // Giao dịch ngân hàng chưa xử lý (không khớp đơn, thiếu/dư tiền...): cũng chỉ là con số phụ
+    const loadBankTodo = async () => {
+      try {
+        const response = await api.get('/admin/bank-transactions', { params: { resolved: 0, page: 1, limit: 1 } });
+        if (active) setBankTodo(Number(response.data.total || 0));
+      } catch { /* bỏ qua */ }
+    };
+    const refresh = () => { loadPendingOrders(); loadPendingReviews(); loadLowStock(); loadBankTodo(); };
     refresh();
     window.addEventListener('hfarm:orders-updated', refresh);
     window.addEventListener('hfarm:reviews-updated', refresh);
@@ -118,16 +132,20 @@ export default function AdminLayout() {
         } : child.key === '/reviews' ? {
           ...child,
           label: <span className="menu-order-label">Đánh giá<Badge count={pendingReviews} overflowCount={99} size="small" /></span>,
+        } : child.key === '/bank-transactions' ? {
+          ...child,
+          label: <span className="menu-order-label">Giao dịch ngân hàng<Badge count={bankTodo} overflowCount={99} size="small" /></span>,
         } : child),
     }))
     .filter((item) => !item.children || item.children.length > 0), // bỏ nhóm không còn mục nào
-  [pendingOrders, pendingReviews, isAdmin]);
+  [pendingOrders, pendingReviews, bankTodo, isAdmin]);
 
   // Chuông: gom các việc cần xử lý (chỉ hiện mục có số > 0), bấm để tới trang tương ứng
   const todo = [
     { key: '/orders', count: pendingOrders, icon: <ShoppingCartOutlined />, text: 'đơn chờ xác nhận' },
     { key: '/reviews', count: pendingReviews, icon: <StarOutlined />, text: 'đánh giá chờ duyệt' },
     { key: '/inventory', count: lowStock, icon: <WarningOutlined />, text: 'biến thể sắp hết hàng' },
+    { key: '/bank-transactions', count: bankTodo, icon: <BankOutlined />, text: 'giao dịch ngân hàng cần xử lý' },
   ].filter((t) => t.count > 0);
   const bellCount = todo.reduce((sum, t) => sum + t.count, 0);
   const bellMenu = {

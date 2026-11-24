@@ -4,10 +4,13 @@ const db = require('../db');
 const { wrap, paging, httpError } = require('../utils');
 const { authenticate } = require('../middleware/auth');
 const { createOrder, quoteOrder, changeOrderStatus, getOrderDetail, TRANSITIONS } = require('../services/orders');
+const { getPaymentInfo } = require('../services/payments');
+const { getOrderTracking } = require('../services/tracking');
 
 router.use(authenticate);
 
-// Xem trước tiền (tạm tính, giảm giá, phí ship, tổng): body { items?, coupon_code }. Không ghi DB.
+// Xem trước tiền (tạm tính, giảm giá, phí ship, tổng): body { items?, coupon_code, address_id? }. Không ghi DB.
+// Có address_id thì phí ship theo vùng của địa chỉ đó; kèm shipping_zone { zone_name, eta_min_days, eta_max_days, free_over }.
 router.post('/quote', wrap(async (req, res) => res.json(await quoteOrder(req.user.id, req.body))));
 
 router.post('/', wrap(async (req, res) => res.status(201).json(await createOrder(req.user.id, req.body))));
@@ -35,6 +38,13 @@ router.get('/', wrap(async (req, res) => {
 }));
 
 router.get('/:id', wrap(async (req, res) => res.json(await getOrderDetail(req.params.id, req.user.id))));
+
+// Thông tin để chuyển khoản đơn này: mã VietQR (ảnh PNG dạng data URL + chuỗi gốc), số tài khoản, nội dung, số giây còn lại.
+// Hết hạn / đã trả / đã hủy thì payable = false và không có mã QR. Chỉ dùng cho đơn chọn chuyển khoản.
+router.get('/:id/payment', wrap(async (req, res) => res.json(await getPaymentInfo(req.params.id, req.user.id))));
+
+// Hành trình giao hàng (mới nhất trước): các mốc đổi trạng thái + mốc nhân viên ghi + mốc đã nhận tiền
+router.get('/:id/tracking', wrap(async (req, res) => res.json(await getOrderTracking(req.params.id, req.user.id))));
 
 // Khách chỉ được hủy đơn khi còn PENDING (changeOrderStatus tự kiểm tra bước chuyển)
 router.post('/:id/cancel', wrap(async (req, res) => {

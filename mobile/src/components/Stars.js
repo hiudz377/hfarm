@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { colors } from '@/utils/theme';
 
-const STAR = '#F5A623';
+const STAR = colors.gold;
 
 // Hiển thị điểm (làm tròn tới nửa sao). Truyền onChange để thành ô chọn số sao (chạm vào sao thứ i = i sao).
 export default function Stars({ value = 0, size = 14, onChange }) {

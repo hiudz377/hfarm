@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   barRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barLabel: { width: 38, fontSize: 12, color: colors.muted },
   track: { flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: 'hidden' },
-  fill: { height: '100%', backgroundColor: '#F5A623' },
+  fill: { height: '100%', backgroundColor: colors.gold },
   barCount: { width: 22, fontSize: 12, color: colors.muted, textAlign: 'right' },
   review: { gap: 4, paddingTop: space.md, borderTopWidth: 1, borderTopColor: colors.border },
   reviewHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

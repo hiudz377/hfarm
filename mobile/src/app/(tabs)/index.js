@@ -1,295 +1,144 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, FlatList, Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { useCallback } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { errMsg } from '@/api/client';
-import { fetchCategories, fetchProducts } from '@/api/products';
-import Chip from '@/components/Chip';
-import EmptyState from '@/components/EmptyState';
-import FilterSheet from '@/components/FilterSheet';
-import KeyboardView from '@/components/KeyboardView';
-import Loading from '@/components/Loading';
-import ProductCard from '@/components/ProductCard';
-import SearchOverlay from '@/components/SearchOverlay';
-import { DEFAULT_SORT, EMPTY_FILTERS, activeFilterCount, clearFilters, sortShortLabel } from '@/utils/productFilters';
-import { useSearchHistory } from '@/utils/searchHistory';
-import { normalizeTerm } from '@/utils/searchTerms';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchBanners, fetchCategories } from '@/api/products';
+import { fetchPaymentMethods } from '@/api/payments';
+import { fetchShippingEstimate } from '@/api/shipping';
+import Button from '@/components/Button';
+import CategoryTiles from '@/components/CategoryTiles';
+import HeroCarousel from '@/components/HeroCarousel';
+import ProductRail from '@/components/ProductRail';
+import { etaText, money } from '@/utils/format';
 import { usePullRefresh } from '@/utils/useRefresh';
 import { colors, radius, space } from '@/utils/theme';
 
-const PAGE_SIZE = 12;
-const GAP = space.md;
+function Perk({ icon, title, sub }) {
+  return (
+    <View style={styles.perk}>
+      <Ionicons name={icon} size={20} color={colors.primary} />
+      <Text style={styles.perkTitle} numberOfLines={2}>{title}</Text>
+      {sub ? <Text style={styles.perkSub} numberOfLines={2}>{sub}</Text> : null}
+    </View>
+  );
+}
 
-export default function Shop() {
+// Trang chủ: banner, ưu đãi giao hàng/thanh toán (lấy từ cấu hình thật của cửa hàng), danh mục, các dải sản phẩm
+export default function Home() {
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const cardWidth = (width - space.lg * 2 - GAP) / 2;
+  const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
-  // text: chữ đang gõ trong ô. q: từ khóa đang áp dụng lên danh sách (chỉ đổi khi bấm tìm / chọn gợi ý / lịch sử).
-  // searching: đang ở ô tìm kiếm (hiện lớp gợi ý + lịch sử thay cho danh sách).
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  const [searching, setSearching] = useState(false);
-  const inputRef = useRef(null);
-  const history = useSearchHistory();
-  const [categoryId, setCategoryId] = useState(null);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const filterCount = activeFilterCount(filters);
-
-  const leaveSearch = () => {
-    setSearching(false);
-    inputRef.current?.blur();
-    Keyboard.dismiss();
-  };
-  const commit = (term) => {
-    const t = normalizeTerm(term);
-    setText(t);
-    setQ(t);
-    if (t) history.add(t);
-    leaveSearch();
-  };
-  const cancelSearch = () => {
-    setText(q); // bỏ chữ gõ dở, quay về từ khóa đang áp dụng
-    leaveSearch();
-  };
-  const clearText = () => {
-    setText('');
-    if (!searching) setQ(''); // đang xem kết quả: xóa ô = bỏ tìm kiếm
-  };
-  const openProduct = (product, typed) => {
-    if (typed) history.add(typed);
-    setText(q);
-    leaveSearch();
-    router.push(`/product/${product.id}`);
-  };
-
-  // Nút Back của Android: đang tìm kiếm thì thoát tìm kiếm thay vì thoát app
-  useEffect(() => {
-    if (!searching) return undefined;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      setText(q);
-      setSearching(false);
-      inputRef.current?.blur();
-      return true;
-    });
-    return () => sub.remove();
-  }, [searching, q]);
-
+  const banners = useQuery({ queryKey: ['banners'], queryFn: fetchBanners, staleTime: 60 * 1000 });
   const categories = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: 5 * 60 * 1000 });
+  const estimate = useQuery({ queryKey: ['shipping-estimate', 'default'], queryFn: () => fetchShippingEstimate(), staleTime: 5 * 60 * 1000 });
+  const methods = useQuery({ queryKey: ['payment-methods'], queryFn: fetchPaymentMethods, staleTime: 5 * 60 * 1000 });
 
-  const products = useInfiniteQuery({
-    queryKey: ['products', { q, categoryId, filters }],
-    queryFn: ({ pageParam }) => fetchProducts({ q, categoryId, filters, page: pageParam, limit: PAGE_SIZE }),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.page * last.limit < last.total ? last.page + 1 : undefined),
-  });
-  // Sản phẩm mới thêm giữa lúc khách cuộn làm các trang lệch nhau: khử trùng theo id để không trùng key
-  const items = useMemo(() => {
-    const seen = new Map();
-    for (const page of products.data?.pages ?? []) for (const p of page.data) if (!seen.has(p.id)) seen.set(p.id, p);
-    return [...seen.values()];
-  }, [products.data]);
+  const { refreshing, onRefresh } = usePullRefresh(
+    useCallback(
+      () => Promise.all([
+        queryClient.refetchQueries({ queryKey: ['home'] }),
+        banners.refetch(), categories.refetch(), estimate.refetch(), methods.refetch(),
+      ]),
+      [queryClient, banners, categories, estimate, methods],
+    ),
+  );
 
-  const { refreshing, onRefresh } = usePullRefresh(products.refetch);
-
-  const loadMore = () => {
-    if (products.hasNextPage && !products.isFetchingNextPage && !products.isFetchNextPageError) products.fetchNextPage();
+  // Tab Cửa hàng giữ trạng thái khi chuyển tab, nên kèm mốc thời gian để mọi lần bấm đều được áp dụng lại
+  const goShop = (params = {}) => router.navigate({ pathname: '/shop', params: { ...params, t: String(Date.now()) } });
+  const openBanner = (b) => {
+    if (b.link_type === 'PRODUCT') router.push(`/product/${b.link_value}`);
+    else if (b.link_type === 'CATEGORY') goShop({ category: b.link_value });
+    else if (b.link_type === 'COLLECTION') goShop({ collection: b.link_value });
   };
 
-  let body;
-  if (products.isPending) {
-    body = <Loading />;
-  } else if (products.isError && !items.length) {
-    body = <EmptyState icon="cloud-offline-outline" title="Không tải được sản phẩm" message={errMsg(products.error)} actionLabel="Thử lại" onAction={() => products.refetch()} />;
-  } else if (!items.length) {
-    body = (
-      <EmptyState
-        icon="search-outline"
-        title="Không tìm thấy sản phẩm"
-        message={q || categoryId || filterCount ? 'Thử từ khóa, danh mục hoặc bộ lọc khác.' : 'Cửa hàng chưa có sản phẩm nào.'}
-        actionLabel={filterCount ? 'Xóa bộ lọc' : undefined}
-        onAction={() => setFilters(clearFilters(filters))}
-      />
-    );
-  } else {
-    body = (
-      <FlatList
-        data={items}
-        keyExtractor={(p) => String(p.id)}
-        numColumns={2}
-        columnWrapperStyle={styles.row}
-        contentContainerStyle={styles.list}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        renderItem={({ item }) => <ProductCard product={item} width={cardWidth} onPress={() => router.push(`/product/${item.id}`)} />}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        ListFooterComponent={
-          products.isFetchingNextPage ? (
-            <ActivityIndicator style={styles.footer} color={colors.primary} />
-          ) : products.isFetchNextPageError ? (
-            <Pressable onPress={() => products.fetchNextPage()} style={styles.footer}>
-              <Text style={styles.retry}>Không tải thêm được. Chạm để thử lại</Text>
-            </Pressable>
-          ) : null
-        }
-      />
-    );
-  }
+  const z = estimate.data;
+  const hasBank = (methods.data?.methods ?? []).some((m) => m.value === 'BANK_TRANSFER');
+  const eta = etaText(z);
 
   return (
-    <KeyboardView style={styles.screen}>
-      <View style={styles.searchRow}>
-        <View style={styles.search}>
-          <Ionicons name="search" size={18} color={colors.muted} />
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            onFocus={() => setSearching(true)}
-            onSubmitEditing={() => commit(text)}
-            placeholder="Tìm sản phẩm..."
-            placeholderTextColor={colors.muted}
-            returnKeyType="search"
-            autoCorrect={false}
-            aria-label="Tìm sản phẩm"
-          />
-          {text ? (
-            <Pressable onPress={clearText} hitSlop={8} role="button" aria-label="Xóa chữ tìm kiếm">
-              <Ionicons name="close-circle" size={18} color={colors.muted} />
-            </Pressable>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + space.md }]}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+    >
+      <View style={styles.top}>
+        <Text style={styles.brand}>HFarm</Text>
+        <Text style={styles.brandSub}>Thời trang</Text>
+      </View>
+
+      <Pressable onPress={() => goShop({ focus: '1' })} style={styles.search} role="button" aria-label="Tìm sản phẩm">
+        <Ionicons name="search" size={18} color={colors.muted} />
+        <Text style={styles.searchText}>Tìm áo, quần, váy...</Text>
+      </Pressable>
+
+      <HeroCarousel banners={banners.data} onOpen={openBanner} onShop={() => goShop()} />
+
+      {z || methods.data ? (
+        <View style={styles.perks}>
+          {z ? (
+            <Perk
+              icon="bicycle-outline"
+              title={z.free_over != null ? `Miễn phí ship từ ${money(z.free_over)}` : `Phí ship ${money(z.fee)}`}
+              sub={z.free_over != null ? `Dưới mức này: ${money(z.base_fee)}` : null}
+            />
+          ) : null}
+          {eta ? <Perk icon="time-outline" title={`Giao trong ${eta}`} sub="Tùy khu vực nhận hàng" /> : null}
+          {methods.data ? (
+            <Perk icon={hasBank ? 'qr-code-outline' : 'cash-outline'} title={hasBank ? 'Thanh toán QR hoặc COD' : 'Thanh toán khi nhận hàng'} sub={hasBank ? 'Quét mã bằng app ngân hàng' : null} />
           ) : null}
         </View>
-        {searching ? (
-          <Pressable onPress={cancelSearch} hitSlop={8} role="button" aria-label="Hủy tìm kiếm">
-            <Text style={styles.cancel}>Hủy</Text>
+      ) : null}
+
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, styles.pad]}>Danh mục</Text>
+        <CategoryTiles
+          categories={categories.data}
+          loading={categories.isPending}
+          onPick={(id) => goShop(id ? { category: String(id) } : {})}
+        />
+        {categories.isError ? (
+          <Pressable onPress={() => categories.refetch()} style={styles.pad}>
+            <Text style={styles.retry}>Không tải được danh mục. Chạm để thử lại</Text>
           </Pressable>
         ) : null}
       </View>
 
-      {searching ? (
-        <SearchOverlay
-          text={text}
-          committed={q}
-          history={history.terms}
-          onPickTerm={commit}
-          onRemoveTerm={history.remove}
-          onClearHistory={history.clear}
-          onSubmit={() => commit(text)}
-          onOpenProduct={openProduct}
-        />
-      ) : (
-        <>
-          <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-              <Chip label="Tất cả" selected={categoryId === null} onPress={() => setCategoryId(null)} />
-              {(categories.data ?? []).map((c) => (
-                <Chip key={c.id} label={c.name} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} />
-              ))}
-            </ScrollView>
-          </View>
+      <ProductRail title="Hàng mới về" kind="new" onSeeAll={() => goShop()} />
+      <ProductRail title="Bán chạy" kind="bestseller" onSeeAll={() => goShop({ collection: 'bestseller' })} />
+      <ProductRail title="Đang giảm giá" kind="sale" onSeeAll={() => goShop({ collection: 'sale' })} />
 
-          {categories.isError ? (
-            <Pressable onPress={() => categories.refetch()} style={styles.catError}>
-              <Text style={styles.retry}>Không tải được danh mục. Chạm để thử lại</Text>
-            </Pressable>
-          ) : null}
-
-          <View style={styles.toolbar}>
-            <Pressable
-              style={[styles.filterBtn, filterCount > 0 && styles.filterBtnOn]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setSheetOpen(true);
-              }}
-              role="button"
-              aria-label={filterCount ? `Lọc và sắp xếp, đang bật ${filterCount} bộ lọc` : 'Lọc và sắp xếp'}
-            >
-              <Ionicons name="options-outline" size={18} color={filterCount > 0 ? colors.primary : colors.text} />
-              <Text style={[styles.filterText, filterCount > 0 && styles.filterTextOn]}>Lọc và sắp xếp</Text>
-              {filterCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{filterCount}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-            <Text style={styles.summary} numberOfLines={1}>
-              {[
-                q ? `“${q}”` : null,
-                products.data ? `${products.data.pages[0].total} sản phẩm` : null,
-                filters.sort !== DEFAULT_SORT ? sortShortLabel(filters.sort) : null,
-              ].filter(Boolean).join(' · ')}
-            </Text>
-            {filterCount > 0 ? (
-              <Pressable onPress={() => setFilters(clearFilters(filters))} hitSlop={8} role="button">
-                <Text style={styles.clear}>Xóa lọc</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          <View style={styles.body}>{body}</View>
-        </>
-      )}
-
-      <FilterSheet
-        visible={sheetOpen}
-        value={filters}
-        onClose={() => setSheetOpen(false)}
-        onApply={(next) => {
-          setFilters(next);
-          setSheetOpen(false);
-        }}
-      />
-    </KeyboardView>
+      <View style={styles.pad}>
+        <Button title="Xem toàn bộ cửa hàng" variant="outline" icon="storefront-outline" onPress={() => goShop()} />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, margin: space.lg, marginBottom: space.sm },
+  screen: { flex: 1, backgroundColor: colors.bg },
+  content: { gap: space.xl, paddingBottom: space.xxl },
+  pad: { paddingHorizontal: space.lg },
+  top: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: space.lg },
+  brand: { fontSize: 28, fontWeight: '900', color: colors.primary, letterSpacing: -0.8 },
+  brandSub: { fontSize: 12, fontWeight: '700', color: colors.muted, letterSpacing: 2, textTransform: 'uppercase' },
   search: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: space.md,
-    height: 44,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, marginHorizontal: space.lg, marginTop: -space.sm,
+    paddingHorizontal: space.lg, borderRadius: radius.pill, backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border,
   },
-  input: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 0 },
-  cancel: { fontSize: 15, color: colors.primary, fontWeight: '600' },
-  chips: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: space.sm },
-  toolbar: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingHorizontal: space.lg, paddingBottom: space.xs },
-  filterBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: space.md,
-    height: 36,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  searchText: { fontSize: 15, color: colors.muted },
+  perks: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.lg },
+  perk: {
+    flex: 1, gap: 4, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
   },
-  filterBtnOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  filterText: { fontSize: 14, color: colors.text },
-  filterTextOn: { color: colors.primary, fontWeight: '600' },
-  badge: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
-  badgeText: { color: colors.white, fontSize: 11, fontWeight: '700' },
-  summary: { flex: 1, fontSize: 13, color: colors.muted },
-  clear: { fontSize: 14, color: colors.primary },
-  body: { flex: 1 },
-  list: { padding: space.lg, paddingTop: space.sm },
-  row: { gap: GAP, marginBottom: GAP },
-  footer: { paddingVertical: space.lg, alignItems: 'center' },
-  catError: { paddingHorizontal: space.lg, paddingBottom: space.sm },
+  perkTitle: { fontSize: 12, fontWeight: '800', color: colors.text, lineHeight: 16 },
+  perkSub: { fontSize: 11, color: colors.muted, lineHeight: 14 },
+  section: { gap: space.md },
+  sectionTitle: { fontSize: 19, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   retry: { color: colors.primary, fontSize: 14 },
 });

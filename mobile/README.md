@@ -58,8 +58,10 @@ src/api/         client.js (axios duy nhất), products (danh sách, gợi ý, l
 src/auth/        AuthProvider (React: trạng thái đăng nhập), keycloak.js (lõi OAuth: đăng nhập, làm mới token, đăng xuất),
                  storage.js (lưu refresh token bằng expo-secure-store), passwordErrors.js (lỗi đăng nhập bằng mật khẩu -> tiếng Việt)
 src/components/  LoginPanel (lời mời đăng nhập), LoginForm (form Đăng nhập / Đăng ký trong app), Button, Card, Chip, EmptyState, Loading,
-                 Photo (expo-image), Field, KeyboardView, QuantityStepper, ProductCard, CartItemRow, PriceSummary, BankInfo,
-                 OrderCard, StatusBadge, Timeline, MenuRow, AddressCard
+                 Photo (expo-image), Field, KeyboardView, QuantityStepper, ProductCard, CartItemRow, PriceSummary,
+                 OrderCard, StatusBadge, Timeline (theo dõi đơn), MenuRow, AddressCard
+  Trang chủ     HeroCarousel (banner từ CMS, mặc định khi chưa có), CategoryTiles (ô danh mục tròn), ProductRail (dải Hàng mới về / Bán chạy / Đang giảm giá), Skeleton (khung chờ khi tải)
+  Thanh toán    PaymentQR (mã VietQR + đếm ngược hạn trả + sao chép + tự cập nhật khi tiền về), AddedToast (thanh "Đã thêm vào giỏ hàng")
   Bộ lọc        FilterSheet: bảng lọc + sắp xếp trượt từ dưới lên (sắp xếp, khoảng giá, size chữ / size số, màu, thương hiệu, "chỉ còn hàng");
                  chỉnh trên bản nháp, bấm "Áp dụng" mới đổi danh sách
   Tìm kiếm      SearchOverlay: lớp hiện khi vào ô tìm kiếm ("Tìm kiếm gần đây" + "Phổ biến" khi chưa gõ; gợi ý sản phẩm khi đang gõ)
@@ -67,7 +69,7 @@ src/components/  LoginPanel (lời mời đăng nhập), LoginForm (form Đăng 
   Đánh giá      Stars (hiển thị / chọn số sao), ReviewSection (điểm trung bình + phân bố + danh sách), RelatedProducts (dải "Sản phẩm liên quan")
 src/utils/       config, theme, format (tiền, ngày, ảnh), queryKeys (khóa React Query dùng chung), useCart (giỏ + làm mới
                  sau đặt/hủy), useRefresh (làm mới khi focus, kéo để làm mới), useDebounce, validate (địa chỉ, hồ sơ, SĐT VN),
-                 orderStatus (nhãn + màu + bộ lọc), payment, bankConfig (thông tin chuyển khoản GIẢ), nav, viMessage (lỗi backend -> tiếng Việt),
+                 orderStatus (nhãn + màu + bộ lọc), payment (phương thức; phương thức nào đang bật do server quyết định), nav, viMessage (lỗi backend -> tiếng Việt),
                  useMounted, useFavorites (danh sách id đã thích, cập nhật lạc quan),
                  productFilters (trạng thái bộ lọc + sắp xếp, thuần JS), searchHistory + searchTerms (lịch sử tìm kiếm lưu bằng AsyncStorage, tô đậm chữ khớp)
 ```
@@ -83,8 +85,9 @@ cho thanh nút cố định; ảnh luôn đi qua `Photo` (expo-image); thông b�
 ## Giỏ hàng và thanh toán (GĐ2)
 - Tiền (tạm tính, giảm giá, phí ship, tổng) luôn lấy từ `POST /api/orders/quote` - cùng hàm tính với `POST /api/orders`,
   nên không cần giữ phí ship ở phía app.
-- **Thông tin chuyển khoản là giả định**: sửa ở `src/utils/bankConfig.js` (ngân hàng, số tài khoản, chủ tài khoản,
-  tiền tố nội dung chuyển khoản). Thay bằng tài khoản thật trước khi phát hành.
+- **Chuyển khoản VietQR (từ 2026-11-24)**: không còn thông tin giả trong app. Tài khoản nhận tiền đặt ở `backend/.env` (`BANK_BIN`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME`); thiếu thì app chỉ còn COD. Sau khi đặt đơn chuyển khoản, màn thành công (và Chi tiết đơn khi còn chưa trả) hiện mã QR đúng số tiền + nội dung, đếm ngược hạn trả, nút Chép, và tự chuyển sang "Đã nhận thanh toán" khi tiền về (hỏi server mỗi 4 giây).
+- **Phí ship theo vùng**: màn Thanh toán gửi `address_id` cho `/orders/quote`; đổi địa chỉ thì phí và "Dự kiến giao trong X ngày" đổi theo.
+- **Giao diện (2026-11-24)**: bảng màu xanh rừng + nền kem ở `src/utils/theme.js`; tab Trang chủ (mới) + tab Cửa hàng (danh sách, tìm kiếm, lọc); header trắng. Trang chủ mở tab Cửa hàng kèm tham số `collection=new|bestseller|sale`, `category=<id>`, `focus=1`.
 - Cần ít nhất 1 sản phẩm có biến thể còn hàng để thử luồng giỏ -> thanh toán; mã giảm giá tạo qua CMS (API `/api/admin/coupons`).
 - Đặt hàng sẽ trừ tồn kho thật trong database. Muốn thử mà không đụng dữ liệu thật, hãy trỏ backend vào một database khác
   (`DB_NAME` trong `backend/.env`, dựng bằng `database/schema.sql` đã đổi tên database).

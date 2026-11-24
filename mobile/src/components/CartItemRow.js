@@ -4,7 +4,7 @@ import Photo from './Photo';
 import QuantityStepper from './QuantityStepper';
 import { lineIssue } from '@/utils/useCart';
 import { money } from '@/utils/format';
-import { colors, radius, space } from '@/utils/theme';
+import { colors, radius, shadow, space } from '@/utils/theme';
 
 // Một dòng trong giỏ. busy: đang gọi API (khóa nút để không gửi chồng yêu cầu).
 export default function CartItemRow({ item, busy, goneId = null, onOpen, onChangeQty, onRemove }) {
@@ -58,15 +58,16 @@ const styles = StyleSheet.create({
     padding: space.md,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    ...shadow.card,
   },
-  rowIssue: { borderColor: colors.danger },
-  photo: { width: 76, height: 100, borderRadius: radius.md },
+  rowIssue: { borderColor: colors.danger, borderWidth: 1 },
+  photo: { width: 80, height: 106, borderRadius: radius.md },
   info: { flex: 1, gap: 3 },
   name: { fontSize: 14, fontWeight: '600', color: colors.text, lineHeight: 18 },
   variant: { fontSize: 13, color: colors.muted },
-  price: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  price: { fontSize: 15, fontWeight: '800', color: colors.text },
   warnRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, flexWrap: 'wrap' },
   warn: { fontSize: 13, color: colors.danger },
   fix: { fontSize: 13, color: colors.primary, fontWeight: '600', textDecorationLine: 'underline' },

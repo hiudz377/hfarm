@@ -198,6 +198,13 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - **Chưa kiểm tra**: CMS khi đăng nhập Keycloak thật (menu theo vai trò staff / admin chỉ thử ở chế độ dev), Safari / Firefox (chỉ thử Edge), màn hình hẹp chỉ kiểm tra không tràn ngang và xem ảnh chụp (chưa dùng trên máy thật), hiệu năng với hàng nghìn khách / mã giảm giá (bảng Khách hàng phân trang phía máy chủ, Mã giảm giá lọc phía trình duyệt trên toàn bộ danh sách), màn đăng nhập Keycloak của CMS (chưa làm theme thương hiệu)
 - Ghi chú: trong lúc kiểm tra có hai lần (trên tổng cộng khoảng 8 lần chạy bước này) bấm nút "Mở khóa" trong hộp xác nhận bị quá thời gian chờ của Playwright dù hộp xác nhận đang hiện bình thường trên ảnh chụp; sau đó lặp lại 25 vòng khóa / mở khóa liên tiếp đều đạt và bộ 75 bước chạy lại đều đạt (cả lần cuối); chưa tìm ra nguyên nhân chắc chắn, nghi do thời điểm chạy của bài kiểm tra
 
+### 4.13 Thanh toán QR, giao hàng theo vùng, trang chủ mới (2026-11-24)
+- [x] Backend: migration 001/002; VietQR tự sinh (không gọi dịch vụ ngoài); webhook SePay; xác nhận tay trong CMS; tự hủy đơn chuyển khoản quá hạn (hoàn kho + hoàn lượt mã giảm giá); vùng ship + ETA; hành trình + tra cứu công khai; banner; `on_sale`; thumbnail danh mục.
+- [x] CMS: trang Vận chuyển, Giao dịch ngân hàng, Banner; chi tiết đơn có "Xác nhận đã nhận tiền" + hành trình + tem in có QR.
+- [x] App: tab Trang chủ (banner, ưu đãi lấy từ cấu hình thật, danh mục, 3 dải sản phẩm), tab Cửa hàng nhận tham số từ trang chủ, khung chờ (skeleton), thẻ sản phẩm mới (nhãn Mới / -% / Hết hàng), thanh "Đã thêm vào giỏ" thay hộp thoại, thông tin giao hàng ở chi tiết sản phẩm, phí ship + ETA theo địa chỉ ở Thanh toán, QR + đếm ngược + tự cập nhật, theo dõi đơn (mã vận đơn sao chép được, timeline gộp). Xóa `BankInfo` và `bankConfig` (thông tin giả).
+- Sửa khi kiểm tra: nhãn thanh tab trên web bị cắt nửa chữ (nhãn bị co còn 7px do `flex-shrink`), sửa bằng `tabBarLabelStyle.flexShrink: 0`; test cũ báo đạt nhầm vì đo nhầm phần tử, đã siết lại.
+- Kiểm tra: xem `docs/STATUS.md` mục 2.1 (backend 125 bước, CMS 26 bước, app web 58 bước, đều trên database tạm). **Chưa kiểm tra**: điện thoại thật, quét QR bằng app ngân hàng thật, webhook SePay thật, in tem ra giấy.
+
 ## Giả định và việc cần quyết định sau
 
 - Dữ liệu: repo không có dữ liệu mẫu sản phẩm, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.

@@ -1,6 +1,6 @@
 # API HFarm (backend Express)
 
-> Lập từ `backend/index.js` và `backend/src/routes/**` ngày 2026-11-18. Đường dẫn dưới đây gồm tiền tố `/api` trừ khi ghi khác.
+> Lập từ `backend/index.js` và `backend/src/routes/**` ngày 2026-11-18, cập nhật 2026-11-24 (thanh toán VietQR, giao hàng theo vùng, banner). Đường dẫn dưới đây gồm tiền tố `/api` trừ khi ghi khác.
 > Địa chỉ: dev `http://localhost:3000`, Docker `http://localhost:3100` (xem [RUNBOOK.md](RUNBOOK.md)).
 
 ## Quy ước chung
@@ -18,15 +18,20 @@
 |---|---|---|---|
 | GET | `/` (không có `/api`) | Kiểm tra sống: `{ message: "Server HFarm đang chạy!" }` | - |
 | GET | `/uploads/<tên-tệp>` (không có `/api`) | Ảnh đã tải lên (tĩnh) | - |
-| GET | `/api/categories` | Danh mục đang hoạt động | - |
+| GET | `/api/categories` | Danh mục đang hoạt động, mỗi mục kèm `thumbnail` (ảnh chính của sản phẩm đang bán mới nhất trong danh mục, `null` nếu chưa có) | - |
 | GET | `/api/brands` | Thương hiệu đang hoạt động | `in_use=1`: chỉ thương hiệu có sản phẩm ĐANG BÁN |
 | GET | `/api/sizes` | Size, thêm `size_group` (`LETTER`/`NUMBER`/`OTHER`), xếp chữ -> số -> khác | `in_use=1`: chỉ size có biến thể đang bán |
 | GET | `/api/colors` | Màu (`id, name, hex_code`) | `in_use=1` như trên |
-| GET | `/api/products` | Sản phẩm ĐANG BÁN, lọc + sắp xếp + phân trang. Trả `{ data, page, limit, total }`; mỗi dòng có `min_price, compare_at_price, total_stock, thumbnail, rating_avg, rating_count, category_name, brand_name` | `q` (tên), `category_id`, `brand_id`/`size_id`/`color_id` (một hoặc nhiều id cách nhau dấu phẩy), `min_price`, `max_price` (theo giá thấp nhất của biến thể đang bán, gồm biên), `in_stock=1`, `sort=newest`(mặc định)`\|price_asc\|price_desc\|bestseller`, `page`, `limit`. `size_id`, `color_id`, `in_stock` phải cùng khớp MỘT biến thể đang bán |
+| GET | `/api/products` | Sản phẩm ĐANG BÁN, lọc + sắp xếp + phân trang. Trả `{ data, page, limit, total }`; mỗi dòng có `min_price, compare_at_price, total_stock, thumbnail, rating_avg, rating_count, category_name, brand_name` | `q` (tên), `category_id`, `brand_id`/`size_id`/`color_id` (một hoặc nhiều id cách nhau dấu phẩy), `min_price`, `max_price` (theo giá thấp nhất của biến thể đang bán, gồm biên), `in_stock=1`, `on_sale=1` (chỉ sản phẩm có biến thể đang bán với `compare_at_price` > `price`), `sort=newest`(mặc định)`\|price_asc\|price_desc\|bestseller`, `page`, `limit`. `size_id`, `color_id`, `in_stock` phải cùng khớp MỘT biến thể đang bán |
 | GET | `/api/products/suggest` | Gợi ý khi gõ tìm kiếm: `[{ id, name, price, thumbnail }]`, không phân biệt hoa/thường và dấu; `q` trống -> `[]` | `q` (tối đa 60 ký tự), `limit` (mặc định 8, tối đa 20) |
 | GET | `/api/products/:id` | Chi tiết: thông tin, `variants` (kèm `size_name, color_name, hex_code, stock`; size chữ trước số), `images`, `rating_avg`, `rating_count`, `sold_count`. Chỉ sản phẩm ACTIVE và biến thể đang bán | - |
 | GET | `/api/products/:id/related` | Sản phẩm liên quan (cùng danh mục, còn hàng/cùng thương hiệu/giá gần trước; thiếu thì bổ sung bán chạy) | `limit` (mặc định 8, tối đa 24) |
 | GET | `/api/products/:id/reviews` | Đánh giá ĐÃ DUYỆT: `{ summary: { count, average, distribution{1..5} }, data: [{ id, rating, comment, created_at, reviewer_name }], page, limit, total }`; `reviewer_name` được che ("Nguyễn V. A.") | `page`, `limit` |
+| GET | `/api/banners` | Banner trang chủ app đang bật và trong thời gian hiển thị, theo thứ tự: `[{ id, title, subtitle, image_url, link_type: NONE\|CATEGORY\|PRODUCT\|COLLECTION, link_value }]` (`COLLECTION`: `new\|bestseller\|sale`). Rỗng thì app hiện banner mặc định | - |
+| GET | `/api/payments/methods` | Phương thức thanh toán đang bật: `{ methods: [{ value: "COD" }, { value: "BANK_TRANSFER", hold_minutes, auto_confirm }] }`. `BANK_TRANSFER` chỉ có khi đã đặt `BANK_*` trong `.env`; `auto_confirm` = webhook ngân hàng đã bật | - |
+| POST | `/api/payments/webhook/sepay` | Webhook ngân hàng (SePay) báo tiền vào. Xem mục 5. 200 `{ success: true, result }` | header `Authorization: Apikey <PAYMENT_WEBHOOK_KEY>`; body SePay (`id, transferType, transferAmount, content, code, accountNumber, transactionDate`). 401 sai khóa, 503 chưa đặt khóa. Giới hạn 120 lần/phút/IP |
+| GET | `/api/shipping/estimate` | Phí + thời gian giao theo vùng: `{ zone_id, zone_name, fee, base_fee, free_over, eta_min_days, eta_max_days }` | `province` (bỏ trống = vùng mặc định), `subtotal` (để tính miễn phí); 400 `Cửa hàng chưa hỗ trợ giao hàng đến khu vực này` |
+| GET | `/api/tracking/:code` | Tra cứu hành trình theo mã vận đơn (không cần đăng nhập): `{ tracking_code, carrier, shipment_status, order_status, shipped_at, delivered_at, recipient (đã che: "N*** An"), province, timeline: [{ id, at, kind, status?, title, location? }] }`. KHÔNG trả SĐT, địa chỉ chi tiết, sản phẩm, tiền. 404 `Không tìm thấy mã vận đơn`. Giới hạn 30 lần/phút/IP | - |
 | GET | `/api/auth/config` | `{ registration: boolean }`: backend đã cấu hình để đăng ký ngay trong app chưa | - |
 | POST | `/api/auth/register` | Tạo tài khoản khách ở Keycloak (role `customer`) rồi app tự đăng nhập. 201 `{ ok: true }` | body `{ email, password (8-128 ký tự), full_name (<= 150, không có ký tự `< > & " ( ) ; * = ?`...) }`. Giới hạn 10 lần/15 phút/IP |
 
@@ -59,14 +64,16 @@ Chỉ thao tác trên dữ liệu của chính người đăng nhập.
 ### 2.3 Đơn hàng (`/api/orders`)
 | Method | Path | Mô tả | Tham số / body chính |
 |---|---|---|---|
-| POST | `/api/orders/quote` | Xem trước tiền `{ subtotal, discount_amount, shipping_fee, total_amount }`; không ghi DB, không kiểm tra tồn kho | body `{ items?: [{ variant_id, quantity }], coupon_code? }` (bỏ `items` = lấy từ giỏ) |
-| POST | `/api/orders` | Đặt hàng (transaction, trừ kho). 201 `{ id, order_code, subtotal, discount_amount, shipping_fee, total_amount }` | body `{ address_id` hoặc `recipient_name, recipient_phone, province, district, ward, address_detail; items?; payment_method: COD\|BANK_TRANSFER\|ONLINE; coupon_code?; customer_note? }` |
+| POST | `/api/orders/quote` | Xem trước tiền `{ subtotal, discount_amount, shipping_fee, total_amount, shipping_zone: { zone_name, fee, free_over, eta_min_days, eta_max_days } }`; không ghi DB, không kiểm tra tồn kho. Phí ship theo vùng của tỉnh trong địa chỉ | body `{ items?: [{ variant_id, quantity }], coupon_code?, address_id? \| province? }` (bỏ `items` = lấy từ giỏ; không có địa chỉ = vùng mặc định) |
+| POST | `/api/orders` | Đặt hàng (transaction, trừ kho). 201 `{ id, order_code, subtotal, discount_amount, shipping_fee, total_amount, shipping_zone }`. `BANK_TRANSFER` đặt `payment_expires_at` (hạn trả) và bị từ chối 400 `Cửa hàng chưa bật thanh toán chuyển khoản` nếu chưa cấu hình ngân hàng | body `{ address_id` hoặc `recipient_name, recipient_phone, province, district, ward, address_detail; items?; payment_method: COD\|BANK_TRANSFER\|ONLINE; coupon_code?; customer_note? }` |
 | GET | `/api/orders` | Đơn của mình, mới nhất trước. Trả MẢNG (không có `total`): `{ id, order_code, total_amount, status, payment_status, created_at, item_count, first_product_name }` | `status` (một hoặc nhiều, cách nhau dấu phẩy), `page`, `limit`; sai -> 400 `Trạng thái đơn hàng không hợp lệ: <X>` |
 | GET | `/api/orders/:id` | Chi tiết: đơn + `items` (kèm `product_id, review_id, review_rating, review_status`) + `history` + `payment` + `shipment`. Đơn của người khác -> 404 | - |
+| GET | `/api/orders/:id/payment` | Thông tin chuyển khoản của đơn `BANK_TRANSFER`: `{ order_code, order_status, payment_status, amount, seconds_left, expired, payable, bank: { bank_name, account_no, account_name }, transfer_content, qr_payload, qr_image }`. `qr_image` là ảnh PNG VietQR dạng data URL (đúng số tiền + nội dung = mã đơn). `payable = false` (đã trả/hủy/quá hạn/chưa cấu hình) thì không có `qr_*`. `seconds_left` tính theo đồng hồ MySQL (null = không có hạn). Đơn COD -> 400 `Đơn này không thanh toán bằng chuyển khoản`; đơn người khác -> 404 | - |
+| GET | `/api/orders/:id/tracking` | Hành trình đơn, mới nhất trước: `{ order_code, order_status, shipment: { carrier, tracking_code, status, shipped_at, delivered_at } \| null, timeline: [{ id, at, kind: status\|payment\|event, status?, title, note?, location? }] }`. Gộp mốc đổi trạng thái, mốc "đã nhận tiền" và mốc nhân viên ghi | - |
 | POST | `/api/orders/:id/cancel` | Hủy (chỉ `PENDING`, hoàn kho). `{ message: "Đã hủy đơn" }` | body `{ note? }`; 400 `Chỉ hủy được đơn đang chờ xác nhận` |
 
 Lỗi đặc trưng khi đặt/báo giá (đều 400): `Giỏ hàng trống`; `Sản phẩm hoặc số lượng không hợp lệ`; `Địa chỉ không tồn tại`; `Thiếu thông tin giao hàng`; `Sản phẩm (mã <N>) không còn bán`; `Mã giảm giá không hợp lệ hoặc đã hết hạn`; `Đơn tối thiểu <số>đ để dùng mã này`; `Mã đã hết lượt dùng`; `Bạn đã dùng hết lượt của mã này`; `Không đủ tồn kho cho <tên (size/màu)> (còn <N>)` (chỉ khi đặt, báo giá không kiểm tra). `payment_method` lạ bị đổi thành `COD`.
-Phí ship 30.000 ₫, miễn phí khi tạm tính >= 500.000 ₫. Chi tiết luồng: [ARCHITECTURE.md](ARCHITECTURE.md) mục 4.
+Phí ship tính theo VÙNG của tỉnh nhận hàng (bảng `shipping_zones`, chỉnh trong CMS; mặc định 30.000 ₫, miễn phí từ 500.000 ₫). Đơn hủy/hoàn trả được trả lại lượt dùng mã giảm giá. Chi tiết luồng: [ARCHITECTURE.md](ARCHITECTURE.md) mục 4.
 
 ### 2.4 Yêu thích và đánh giá
 | Method | Path | Mô tả | Tham số / body chính |
@@ -112,7 +119,10 @@ Toàn bộ nhóm này đi qua `authenticate` + `requireRole('admin','staff')` (`
 | GET | `/api/admin/orders` | `{ data: [{ id, order_code, recipient_name, recipient_phone, total_amount, status, payment_status, created_at, customer_email, carrier, tracking_code, payment_method }], page, limit, total }` | `status` (nhiều giá trị cách nhau dấu phẩy), `payment_status` (`UNPAID\|PAID\|PARTIALLY_REFUNDED\|REFUNDED\|FAILED`), `q` (mã đơn/tên/SĐT/mã vận đơn), `page`, `limit`; sai -> 400 `Trạng thái đơn hàng không hợp lệ: <X>` / `Trạng thái thanh toán không hợp lệ: <X>` |
 | GET | `/api/admin/orders/counts` | Số đơn mỗi trạng thái (đủ 7 khóa) | - |
 | POST | `/api/admin/orders/bulk` | Xử lý 1-100 đơn theo "bước tiếp theo". `{ results: [{ id, order_code, ok, status, tracking_code?, error? }], succeeded, failed }` | `{ ids: [..], action: confirm\|ship\|complete\|cancel\|return, note?, carrier?, tracking_code? (chỉ khi 1 đơn) }`; 400 `Thao tác không hợp lệ` / `Chưa chọn đơn hàng nào` / `Mã đơn hàng không hợp lệ` / `Chỉ xử lý tối đa 100 đơn mỗi lần` / `Chỉ nhập mã vận đơn khi xử lý một đơn` |
-| GET | `/api/admin/orders/:id` | Chi tiết đầy đủ (kèm `customer_name/email/phone`, `items`, `history`, `payment`, `shipment`) | 404 `Không tìm thấy đơn hàng` |
+| GET | `/api/admin/orders/:id` | Chi tiết đầy đủ (kèm `customer_name/email/phone`, `items`, `history`, `payment`, `shipment`, `payment_expires_at`, `shipment_events`) | 404 `Không tìm thấy đơn hàng` |
+| POST | `/api/admin/orders/:id/confirm-payment` | Xác nhận ĐÃ NHẬN TIỀN (đơn chuyển khoản/online): `payment_status = PAID`, ghi lịch sử, trả chi tiết đơn | `{ transaction_code? (<= 150), note? (<= 300) }`; 400 `Đơn này đã được xác nhận thanh toán` / `Đơn thanh toán khi nhận hàng được thu tiền lúc giao, không cần xác nhận` / `Đơn đã hủy hoặc hoàn trả nên không nhận thanh toán được` |
+| POST | `/api/admin/orders/:id/shipment-events` | Ghi mốc hành trình khi đơn đang `SHIPPING` (khách thấy trong app), 201 `{ id }` | `{ title (<= 200), location? (<= 150) }`; 400 `Chỉ ghi hành trình khi đơn đang giao` |
+| DELETE | `/api/admin/orders/:id/shipment-events/:eventId` | Xóa mốc hành trình; 404 `Không tìm thấy mục hành trình` | - |
 | PATCH | `/api/admin/orders/:id/status` | Đổi đúng một bước, trả chi tiết đơn | `{ status, note?, carrier?, tracking_code? }`; 400 `Thiếu trạng thái` / `Không thể chuyển từ "<nhãn>" sang "<nhãn>"` / `Mã vận đơn này đã được dùng cho đơn khác` / `Mã vận đơn tối đa 150 ký tự` / `Tên đơn vị vận chuyển tối đa 100 ký tự` |
 | PATCH | `/api/admin/orders/:id/note` | Lưu ghi chú nhân viên (`staff_note`) | `{ staff_note }` |
 
@@ -146,7 +156,34 @@ Mã vận đơn tự sinh khi sang `SHIPPING` mà không nhập: `HF` + yyMMdd +
 | POST | `/api/admin/coupons` | Tạo, 201 `{ id }`; thiếu trường -> 400 `Thiếu <tên_cột>` | `code, discount_type (PERCENTAGE\|FIXED_AMOUNT), discount_value, starts_at, ends_at` (bắt buộc), `description, min_order_amount, max_discount, usage_limit, per_user_limit, is_active` |
 | PUT | `/api/admin/coupons/:id` | Sửa một phần (không có API xóa mã) | như trên |
 
+### 3.7 Vận chuyển và giao dịch ngân hàng
+| Method | Path | Role | Mô tả | Body / tham số chính |
+|---|---|---|---|---|
+| GET | `/api/admin/shipping-zones` | admin, staff | Mọi vùng (kể cả đang tắt): `[{ id, name, provinces: [..] \| null, is_default, fee, free_over, eta_min_days, eta_max_days, is_active }]` | - |
+| POST | `/api/admin/shipping-zones` | **admin** | Tạo vùng (không phải mặc định), 201 `{ id }` | `{ name, provinces: [..] (>= 1), fee, free_over?, eta_min_days, eta_max_days, is_active? }`; 400 `"<tỉnh>" đã thuộc vùng "<tên>"` / `Vùng không phải mặc định cần ít nhất một tỉnh/thành` / `Phí vận chuyển không hợp lệ` |
+| PUT | `/api/admin/shipping-zones/:id` | **admin** | Sửa; vùng mặc định chỉ sửa được tên/phí/ngưỡng/ngày (không đổi loại, không tắt) | như trên |
+| DELETE | `/api/admin/shipping-zones/:id` | **admin** | Xóa vùng; vùng mặc định -> 400 `Không xóa được vùng mặc định` | - |
+| GET | `/api/admin/bank-transactions` | admin, staff | Giao dịch tiền vào nhận qua webhook: `{ data: [{ id, provider, provider_tx_id, amount, content, transaction_time, match_status, note, resolved, order_id, order_code, order_total, order_status }], page, limit, total }` | `resolved=0` (cần xử lý) \| `1`, `page`, `limit` |
+| PATCH | `/api/admin/bank-transactions/:id/resolve` | admin, staff | Đánh dấu đã xử lý (đã hoàn tiền/đã đối soát); 404 `Không tìm thấy giao dịch` | - |
+
+### 3.8 Banner trang chủ - CHỈ admin
+| Method | Path | Mô tả | Body chính |
+|---|---|---|---|
+| GET | `/api/admin/banners` | Mọi banner (kể cả tắt/hết hạn), theo `sort_order` | - |
+| POST | `/api/admin/banners` | Tạo, 201 `{ id }` | `{ title (<= 150), subtitle? (<= 250), image_url (http...; tải ảnh bằng /admin/upload), link_type, link_value, sort_order?, is_active?, starts_at?, ends_at? ("YYYY-MM-DD HH:mm") }`; 400 `Hãy chọn danh mục` / `Sản phẩm không tồn tại` / `Bộ sưu tập không hợp lệ` / `Ngày kết thúc phải sau ngày bắt đầu` |
+| PUT | `/api/admin/banners/:id` | Sửa (gửi đủ trường); 404 `Không tìm thấy banner` | như trên |
+| DELETE | `/api/admin/banners/:id` | Xóa | - |
+
 ## 4. Ghi chú khi dùng
 - Mã giảm giá không phân biệt hoa/thường (do collation MySQL).
 - `GET /api/orders` (khách) trả mảng, còn `GET /api/admin/orders` trả `{ data, page, limit, total }`.
 - Khi thêm endpoint mới: thêm vào bảng ở đây và vào mục phân quyền của [ARCHITECTURE.md](ARCHITECTURE.md); mọi route admin phải đi qua middleware role ở backend.
+
+## 5. Thanh toán chuyển khoản VietQR và webhook
+- **Bật chuyển khoản**: đặt `BANK_BIN` (6 số NAPAS), `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME` (và `BANK_NAME`) trong `backend/.env`. Thiếu thì `GET /payments/methods` chỉ trả `COD` và `POST /orders` với `BANK_TRANSFER` bị 400.
+- **Mã QR** sinh tại server theo chuẩn VietQR/NAPAS 247 (EMVCo, CRC16): đúng số tiền, nội dung chuyển khoản = mã đơn (`HT` + ngày + 5 số). Không gọi dịch vụ ngoài.
+- **Hạn trả** `PAYMENT_HOLD_MINUTES` (mặc định 1440): quá hạn mà đơn còn `PENDING` + `UNPAID` thì backend (mỗi phút) tự hủy, hoàn kho và hoàn lượt mã giảm giá. Đơn nhân viên đã xác nhận thì không tự hủy.
+- **Webhook SePay** (`POST /api/payments/webhook/sepay`): chỉ bật khi đặt `PAYMENT_WEBHOOK_KEY`. Chỉ xử lý `transferType = "in"`; tìm mã đơn (`HT` + 13 số) trong `code`/`content` (bỏ ký tự phân cách, không phân biệt hoa thường). Chống xử lý trùng theo `(provider, id)`. Kết quả ghi ở `bank_transactions.match_status`:
+  - `MATCHED`: đủ tiền -> đơn `PAID` (chuyển thiếu rồi bù thì cộng dồn). Chuyển dư vẫn `MATCHED` nhưng ghi chú "cần hoàn lại" và chờ nhân viên.
+  - `AMOUNT_MISMATCH` (thiếu), `ALREADY_PAID` (chuyển trùng), `ORDER_CLOSED` (đơn đã hủy/quá hạn, KHÔNG mở lại đơn), `UNMATCHED` (không có mã đơn, đơn không tồn tại/không chọn chuyển khoản, sai tài khoản nhận): hiện ở CMS > Giao dịch ngân hàng để nhân viên xử lý. Hoàn tiền làm ngoài hệ thống.
+- Chỉ định dạng SePay được cài; nhà cung cấp khác cần thêm bộ chuyển đổi vào `routes/payments.js` (hàm `processIncomingTransfer` dùng chung).

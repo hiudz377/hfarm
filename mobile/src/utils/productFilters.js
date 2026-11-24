@@ -17,13 +17,13 @@ export const PRICE_RANGES = [
 ];
 
 export const DEFAULT_SORT = 'newest';
-export const EMPTY_FILTERS = { sort: DEFAULT_SORT, priceKey: null, sizeIds: [], colorIds: [], brandIds: [], inStock: false };
+export const EMPTY_FILTERS = { sort: DEFAULT_SORT, priceKey: null, sizeIds: [], colorIds: [], brandIds: [], inStock: false, onSale: false };
 
 export const sortShortLabel = (key) => (SORT_OPTIONS.find((o) => o.key === key) ?? SORT_OPTIONS[0]).short;
 
 // Số nhóm bộ lọc đang bật (không tính sắp xếp): dùng cho dấu số trên nút "Lọc"
 export function activeFilterCount(f) {
-  return (f.priceKey ? 1 : 0) + (f.sizeIds.length ? 1 : 0) + (f.colorIds.length ? 1 : 0) + (f.brandIds.length ? 1 : 0) + (f.inStock ? 1 : 0);
+  return (f.priceKey ? 1 : 0) + (f.sizeIds.length ? 1 : 0) + (f.colorIds.length ? 1 : 0) + (f.brandIds.length ? 1 : 0) + (f.inStock ? 1 : 0) + (f.onSale ? 1 : 0);
 }
 
 // Bật/tắt một id trong danh sách và giữ thứ tự tăng dần để khóa React Query ổn định (chọn 1,2 hay 2,1 là một)
@@ -47,5 +47,6 @@ export function filterParams(f) {
     color_id: list(f.colorIds),
     brand_id: list(f.brandIds),
     in_stock: f.inStock ? 1 : undefined,
+    on_sale: f.onSale ? 1 : undefined,
   };
 }

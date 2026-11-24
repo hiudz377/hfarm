@@ -8,6 +8,8 @@ import { errMsg } from '@/api/client';
 import { addToCart } from '@/api/cart';
 import { useAuth } from '@/auth/AuthProvider';
 import { fetchProduct } from '@/api/products';
+import { fetchShippingEstimate } from '@/api/shipping';
+import AddedToast from '@/components/AddedToast';
 import Button from '@/components/Button';
 import Chip from '@/components/Chip';
 import EmptyState from '@/components/EmptyState';
@@ -18,10 +20,10 @@ import QuantityStepper from '@/components/QuantityStepper';
 import RelatedProducts from '@/components/RelatedProducts';
 import ReviewSection from '@/components/ReviewSection';
 import Stars from '@/components/Stars';
-import { money } from '@/utils/format';
+import { etaText, money } from '@/utils/format';
 import { goBack, goToTab } from '@/utils/nav';
 import { CART_KEY, useCart } from '@/utils/useCart';
-import { colors, space } from '@/utils/theme';
+import { colors, radius, space } from '@/utils/theme';
 
 // Lấy các giá trị duy nhất theo `key`, giữ thứ tự (backend đã sắp theo size.sort_order, color.id)
 const uniq = (list, key, map) => {
@@ -61,7 +63,11 @@ export default function ProductDetail() {
   const [qty, setQty] = useState(1);
   const [page, setPage] = useState(0);
   const [descOpen, setDescOpen] = useState(false);
+  const [toast, setToast] = useState(null); // { name, image } khi vừa thêm vào giỏ
   const gallery = useRef(null);
+
+  // Thông tin giao hàng (vùng mặc định của cửa hàng): phí, miễn phí từ bao nhiêu, thời gian giao
+  const ship = useQuery({ queryKey: ['shipping-estimate', 'default'], queryFn: () => fetchShippingEstimate(), staleTime: 5 * 60 * 1000 });
 
   // Giỏ hiện tại (cùng cache với tab Giỏ hàng): để biết trong giỏ đã có bao nhiêu của biến thể này
   const { data: cart } = useCart();
@@ -75,11 +81,9 @@ export default function ProductDetail() {
       // Backend trả về cả giỏ mới: ghi thẳng vào cache để badge + tab Giỏ hàng cập nhật ngay, không chờ tải lại
       queryClient.setQueryData(CART_KEY, newCart);
       setQty(1);
-      Alert.alert('Đã thêm vào giỏ hàng', product.name, [
-        { text: 'Tiếp tục mua' },
-        // dismissTo: quay về màn (tabs) đã có rồi chọn tab Giỏ hàng. navigate('/cart') sẽ chồng thêm một bản (tabs) mới.
-        { text: 'Xem giỏ hàng', onPress: () => goToTab(router, '/cart') },
-      ]);
+      // Thanh báo trượt lên (không chặn màn hình); "Xem giỏ" -> dismissTo: quay về màn (tabs) đã có rồi chọn tab Giỏ hàng.
+      // navigate('/cart') sẽ chồng thêm một bản (tabs) mới.
+      setToast({ name: product.name, image: product.images?.[0]?.image_url ?? null, at: Date.now() });
     },
     onError: (e) => {
       Alert.alert('Không thêm được vào giỏ', errMsg(e));
@@ -177,8 +181,8 @@ export default function ProductDetail() {
             </View>
           ) : null}
           {pics.length > 1 ? (
-            <View style={styles.counter}>
-              <Text style={styles.counterText}>{page + 1}/{pics.length}</Text>
+            <View style={styles.dots}>
+              {pics.map((_, i) => <View key={i} style={[styles.dot, i === page && styles.dotOn]} />)}
             </View>
           ) : null}
         </View>
@@ -221,10 +225,32 @@ export default function ProductDetail() {
             {Number(product.sold_count) > 0 ? <Text style={styles.ratingText}>· Đã bán {product.sold_count}</Text> : null}
           </View>
           <View style={styles.priceRow}>
-            <Text style={styles.price}>{priceText}</Text>
+            <Text style={[styles.price, comparePrice && styles.priceSale]}>{priceText}</Text>
             {comparePrice ? <Text style={styles.compare}>{money(comparePrice)}</Text> : null}
+            {discount > 0 ? <Text style={styles.saveTag}>Tiết kiệm {money(comparePrice - refVariant.price)}</Text> : null}
           </View>
         </View>
+
+        {ship.data ? (
+          <View style={styles.section}>
+            <View style={styles.delivery}>
+              <View style={styles.deliveryRow}>
+                <Ionicons name="bicycle-outline" size={20} color={colors.primary} />
+                <Text style={styles.deliveryText}>
+                  {ship.data.free_over != null ? `Miễn phí vận chuyển cho đơn từ ${money(ship.data.free_over)}` : `Phí vận chuyển ${money(ship.data.fee)}`}
+                </Text>
+              </View>
+              {ship.data.eta_max_days != null ? (
+                <View style={styles.deliveryRow}>
+                  <Ionicons name="time-outline" size={20} color={colors.primary} />
+                  <Text style={styles.deliveryText}>
+                    Dự kiến giao trong {etaText(ship.data)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
         {colorOptions.length ? (
           <View style={styles.section}>
@@ -306,6 +332,16 @@ export default function ProductDetail() {
           }}
         />
       </View>
+
+      <AddedToast
+        toast={toast}
+        bottom={insets.bottom + 84}
+        onClose={() => setToast(null)}
+        onView={() => {
+          setToast(null);
+          goToTab(router, '/cart');
+        }}
+      />
     </View>
   );
 }
@@ -329,13 +365,19 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: 14, color: colors.muted },
   infoValue: { fontSize: 14, color: colors.text, flexShrink: 1, textAlign: 'right' },
   more: { fontSize: 14, color: colors.primary, fontWeight: '600' },
-  counter: { position: 'absolute', right: 12, bottom: 12, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  counterText: { color: colors.white, fontSize: 12 },
+  dots: { position: 'absolute', left: 0, right: 0, bottom: 12, flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.65)' },
+  dotOn: { width: 18, backgroundColor: colors.white },
+  priceSale: { color: colors.sale },
+  saveTag: { fontSize: 12, fontWeight: '800', color: colors.sale, backgroundColor: colors.dangerSoft, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  delivery: { gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  deliveryRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  deliveryText: { flex: 1, fontSize: 13, color: colors.text, lineHeight: 18 },
   section: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: 8 },
-  name: { fontSize: 20, fontWeight: '700', color: colors.text },
+  name: { fontSize: 21, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
   meta: { fontSize: 13, color: colors.muted },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10 },
-  price: { fontSize: 22, fontWeight: '700', color: colors.primary },
+  price: { fontSize: 24, fontWeight: '900', color: colors.text, letterSpacing: -0.4 },
   compare: { fontSize: 14, color: colors.muted, textDecorationLine: 'line-through' },
   label: { fontSize: 15, fontWeight: '600', color: colors.text },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

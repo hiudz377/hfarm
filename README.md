@@ -95,6 +95,11 @@ vào `backend/.env` (bỏ `--write-env` thì chỉ in ra màn hình). Chạy l�
 - "Quên mật khẩu?" trong app mở trang đăng nhập của Keycloak (cần bật Forgot password và cấu hình email của realm); CMS (nhân viên) vẫn đăng nhập qua trang Keycloak.
 - Đã xóa tài khoản ở Keycloak rồi đăng ký lại bằng đúng email cũ: backend báo 409 "Email đã được dùng bởi một tài khoản khác" vì dòng cũ trong bảng `users` vẫn giữ email đó (xóa hoặc đổi email dòng cũ).
 
+**5. (Tùy chọn) Giao diện đăng nhập mang thương hiệu HFarm**: theme nằm ở `keycloak/themes/hfarm`. Chép vào container
+(`docker cp "keycloak\themes\hfarm" keycloak-hfarm:/opt/keycloak/themes/`), rồi trong trang quản trị Keycloak: realm `hfarm` →
+Realm settings → Themes → **Login theme = `hfarm`**; muốn chữ tiếng Việt thì Localization → Internationalization On, Default locale = Tiếng Việt.
+Chi tiết, cách sửa và quay lại giao diện cũ: `docs/RUNBOOK.md` mục 2.
+
 **Phân quyền** (backend kiểm tra bằng `requireRole`, giao diện chỉ ẩn thêm cho gọn):
 
 | Chức năng | admin | staff |
@@ -129,7 +134,8 @@ docker compose up -d --build
   `docker compose exec -T db mysql -uroot -p<mật-khẩu-DB_PASSWORD> clothing_store < clothing_store.sql`.
 
 ## Các nhóm API
-- Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors
+- Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors, /api/banners, /api/payments/methods, /api/shipping/estimate, /api/tracking/:mã-vận-đơn
+  - Từ 2026-11-24: `GET /api/products?on_sale=1` (chỉ sản phẩm đang giảm giá); `GET /api/categories` kèm `thumbnail`; `GET /api/banners` (banner trang chủ app); `GET /api/payments/methods` (COD, và chuyển khoản nếu đã cấu hình `BANK_*`); `GET /api/shipping/estimate?province=&subtotal=` (phí + số ngày giao theo vùng); `GET /api/tracking/:code` (tra cứu hành trình, tên người nhận được che, không lộ SĐT/địa chỉ). Chi tiết: `docs/API.md`.
   - `GET /api/products` lọc + sắp xếp + phân trang. Tham số (đều tùy chọn): `q` (tìm theo tên), `category_id`,
     `brand_id` / `size_id` / `color_id` (một hoặc nhiều id cách nhau dấu phẩy, ví dụ `size_id=2,3`),
     `min_price` / `max_price` (tính theo giá thấp nhất của các biến thể đang bán, gồm cả biên),
@@ -150,10 +156,15 @@ docker compose up -d --build
   - `POST /api/orders/quote`: body `{ "items": [{ "variant_id": 1, "quantity": 2 }], "coupon_code": "SALE10" }` (cả hai tùy chọn; bỏ `items` = lấy từ giỏ). Trả `{ subtotal, discount_amount, shipping_fee, total_amount }`, dùng chung hàm tính với `POST /api/orders` nên luôn khớp; không ghi DB và không kiểm tra tồn kho. Lỗi (mã sai/hết hạn, đơn tối thiểu, giỏ trống...) trả 400 kèm thông báo tiếng Việt.
   - `POST /api/orders` trả thêm `order_code`.
   - `GET /api/orders?status=&page=&limit=`: đơn của chính người đăng nhập, mới nhất trước. `status` là một trạng thái hoặc nhiều trạng thái cách nhau dấu phẩy (`PENDING`, `CONFIRMED,PROCESSING,SHIPPING`...); giá trị lạ trả 400. Mỗi đơn có thêm `item_count` (số dòng hàng) và `first_product_name`.
-  - `GET /api/orders/:id` (chi tiết + lịch sử + thanh toán + vận chuyển) và `POST /api/orders/:id/cancel` (chỉ đơn `PENDING`, hoàn kho).
-- CMS (admin/staff): /api/admin/products, /inventory, /orders, /reviews, /categories, /brands, /sizes, /colors, /users, /coupons, /stats (xem bảng phân quyền ở mục Keycloak)
+  - `GET /api/orders/:id` (chi tiết + lịch sử + thanh toán + vận chuyển) và `POST /api/orders/:id/cancel` (chỉ đơn `PENDING`, hoàn kho và hoàn lượt mã giảm giá).
+  - `POST /api/orders/quote` nhận thêm `address_id` (phí ship theo vùng của tỉnh trong địa chỉ) và trả thêm `shipping_zone { zone_name, eta_min_days, eta_max_days, free_over }`.
+  - `GET /api/orders/:id/payment`: thông tin chuyển khoản của đơn `BANK_TRANSFER` kèm ảnh mã VietQR (`qr_image`, data URL) đúng số tiền + nội dung, `seconds_left` (hạn trả), `payable`. `GET /api/orders/:id/tracking`: hành trình giao hàng (mới nhất trước).
+  - Thanh toán chuyển khoản: bật bằng `BANK_BIN`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME` trong `backend/.env`; đơn quá `PAYMENT_HOLD_MINUTES` (mặc định 24 giờ) chưa trả tự hủy + hoàn kho; webhook `POST /api/payments/webhook/sepay` (khóa `PAYMENT_WEBHOOK_KEY`) tự đánh dấu đã trả. Hướng dẫn: `docs/RUNBOOK.md` mục 8 và 9.
+- CMS (admin/staff): /api/admin/products, /inventory, /orders, /reviews, /categories, /brands, /sizes, /colors, /users, /coupons, /stats, /shipping-zones, /bank-transactions, /banners (xem bảng phân quyền ở mục Keycloak và `docs/ARCHITECTURE.md` mục 3.6)
 
 ### API CMS bổ sung
+- **Database: áp dụng migration trước khi chạy backend mới** (`database/migrations/001_payment_shipping.sql`, `002_banners.sql`; chạy đúng một lần, cách làm: `docs/RUNBOOK.md` mục 8). Thiếu thì backend dừng ngay và nói rõ file nào.
+- `POST /api/admin/orders/:id/confirm-payment` (xác nhận đã nhận tiền chuyển khoản), `POST /api/admin/orders/:id/shipment-events` + `DELETE .../:eventId` (ghi/xóa mốc hành trình khi đơn đang giao), `GET/POST/PUT/DELETE /api/admin/shipping-zones` (phí ship theo vùng; chỉ admin ghi), `GET /api/admin/bank-transactions` + `PATCH .../:id/resolve` (giao dịch ngân hàng cần xử lý), `GET/POST/PUT/DELETE /api/admin/banners` (chỉ admin).
 - `GET /api/admin/me`: người đang đăng nhập (admin hoặc staff), trả `{ id, email, full_name, roles }` (`roles` chỉ gồm `admin`/`staff`/`customer`).
 - `POST /api/admin/upload`: multipart/form-data, field `file`; chỉ nhận JPG/PNG/WebP tối đa 5 MB, trả `{ "url": "..." }`. URL dùng `PUBLIC_URL`.
 - `GET /api/admin/stats/revenue?days=30`: doanh thu và số đơn COMPLETED theo từng ngày (bao gồm ngày không có đơn); `days` từ 1 đến 365.

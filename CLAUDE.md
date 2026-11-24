@@ -25,10 +25,11 @@ Hệ thống quản lý + bán quần áo: **backend** Node/Express + MySQL, **w
 - Client `hfarm-web` và `hfarm-mobile` là **public client**, Standard flow, **Require PKCE (S256)**. Backend không giữ secret của chúng.
 - Backend: `AUTH_ENABLED` (true = bắt token), `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_ISSUERS` (nhiều issuer: web `localhost` + điện thoại IP LAN). `middleware/auth.js`: JWKS -> issuer -> hạn -> đồng bộ `users` theo `sub`; 401 = token sai/thiếu, 403 = thiếu quyền/bị khóa, 503 = Keycloak không tới được.
 - Chế độ dev (`AUTH_ENABLED` khác `true`): header `X-Dev-Role: admin|staff|customer` (mặc định `DEV_ROLE`). **Ai gọi API cũng là admin: không mở ra ngoài.**
+- Giao diện trang đăng nhập Keycloak: theme `keycloak/themes/hfarm` (CSS + logo + câu chữ, không `.ftl`), cài bằng `docker cp` rồi chọn Login theme trong trang quản trị (RUNBOOK mục 2). Muốn thử thì dùng container Keycloak tạm cổng khác, đừng thử trên realm thật.
 - Đăng ký/đăng nhập ngay trong app: `POST /api/auth/register` (backend dùng client `hfarm-backend` gọi Keycloak Admin API) + password grant (cần Direct access grants cho `hfarm-mobile`, bật bằng `npm run setup:keycloak`). Rủi ro: ARCHITECTURE mục 7.
 
 ## Quy tắc khi sửa code
-1. **Không sửa `database/schema.sql`.** Cần đổi cấu trúc thì tạo file trong `database/migrations/` (thư mục chưa có, hãy tạo) và nói rõ cách áp dụng.
+1. **Không sửa `database/schema.sql`.** Cần đổi cấu trúc thì tạo file mới trong `database/migrations/` (đã có `001`, `002`; đánh số tiếp, chỉ thêm, chạy một lần), thêm vào `backend/src/migrations.js` (kiểm tra khi khởi động) và `docker-compose.yml`, nói rõ cách áp dụng (`docs/RUNBOOK.md` mục 8).
 2. **Không đổi logic đặt hàng / trừ kho / hoàn kho** ở `backend/src/services/orders.js` và `backend/src/services/stock.js` trừ khi có lỗi thật; khi đó phải nói rõ sửa gì và vì sao.
 3. **Mọi route admin phải đi qua middleware role ở backend** (`requireRole`), không chỉ ẩn ở giao diện. Route mới -> cập nhật bảng phân quyền trong `docs/ARCHITECTURE.md` và `docs/API.md`.
 4. **SQL luôn dùng tham số `?`**; không ghép chuỗi người dùng vào SQL (cột sắp xếp chỉ lấy từ danh sách cố định như `SORTS`).
@@ -42,9 +43,9 @@ Mobile (Expo; bản đầy đủ `mobile/AGENTS.md`): Expo đổi API mỗi SDK,
 Mọi `EXPO_PUBLIC_*`, `VITE_*` đều nhúng vào bản build nên không đặt bí mật; đổi xong phải restart/`--clear`/build lại.
 
 ## Tình trạng (chi tiết: `docs/STATUS.md`)
-- Xong: backend đầy đủ (catalog, giỏ, đặt hàng an toàn đồng thời, đơn hàng + hoàn kho, đánh giá, yêu thích, CMS), web CMS 9 trang, app mobile đủ luồng mua hàng, đăng nhập/đăng ký trong app, Docker Compose.
+- Xong: backend đầy đủ (catalog, giỏ, đặt hàng an toàn đồng thời, đơn hàng + hoàn kho, đánh giá, yêu thích, CMS), web CMS 12 trang, app mobile đủ luồng mua hàng (trang chủ có banner, thanh toán QR VietQR, phí ship theo vùng, theo dõi đơn), đăng nhập/đăng ký trong app, Docker Compose.
 - Đã test trên DB tạm + Keycloak thử nghiệm + bản web của app trên Edge; **chưa thử điện thoại thật/Expo Go**, chưa chạy `setup:keycloak` trên Keycloak thật.
-- Chưa có: test trong repo, thanh toán online, thông tin chuyển khoản thật (`mobile/src/utils/bankConfig.js` là giả), theme đăng nhập Keycloak, quên mật khẩu/xác minh email (cần SMTP), thông báo đẩy.
+- Chưa có: test trong repo, cổng thanh toán online (thẻ/ví), tài khoản ngân hàng thật (đặt `BANK_*` trong `backend/.env`, chưa quét thử bằng app ngân hàng thật), nối hãng vận chuyển thật (GHN/GHTK), quên mật khẩu/xác minh email (cần SMTP), thông báo đẩy. Theme đăng nhập Keycloak `hfarm` đã làm (`keycloak/themes/hfarm`) nhưng realm thật chưa chọn.
 - Mặc định Docker/dev là chế độ không xác thực: chỉ chạy trên máy mình.
 - Việc tiếp theo gợi ý: thử điện thoại thật, đưa test vào repo, chốt chiến lược đăng nhập app (Direct access grants), thanh toán thật.
 

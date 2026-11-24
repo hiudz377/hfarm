@@ -14,6 +14,9 @@ const Inventory = lazy(() => import('./pages/Inventory.jsx'));
 const Attributes = lazy(() => import('./pages/Attributes.jsx'));
 const Coupons = lazy(() => import('./pages/Coupons.jsx'));
 const Reviews = lazy(() => import('./pages/Reviews.jsx'));
+const Shipping = lazy(() => import('./pages/Shipping.jsx'));
+const BankTransactions = lazy(() => import('./pages/BankTransactions.jsx'));
+const Banners = lazy(() => import('./pages/Banners.jsx'));
 
 const categoryFields = (rows) => [
   { name: 'name', label: 'Tên danh mục', required: true },
@@ -37,6 +40,10 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/products" element={<Products />} />
         <Route path="/inventory" element={<Inventory />} />
+        {/* Vận chuyển + Giao dịch ngân hàng: staff được xem (và xử lý giao dịch), chỉ admin sửa vùng ship; Banner chỉ admin */}
+        <Route path="/shipping" element={<Shipping />} />
+        <Route path="/bank-transactions" element={<BankTransactions />} />
+        <Route path="/banners" element={<AdminOnly><Banners /></AdminOnly>} />
         {/* Chỉ admin: Size & Màu, Mã giảm giá, Danh mục, Thương hiệu, Khách hàng (khớp requireRole('admin') ở backend) */}
         <Route path="/attributes" element={<AdminOnly><Attributes /></AdminOnly>} />
         <Route path="/coupons" element={<AdminOnly><Coupons /></AdminOnly>} />

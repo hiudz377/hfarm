@@ -18,6 +18,6 @@ export default function Photo({ uri, style, contentFit = 'cover' }) {
 }
 
 const styles = StyleSheet.create({
-  box: { backgroundColor: '#EEF1EE' },
+  box: { backgroundColor: '#EDEBE4' },
   center: { alignItems: 'center', justifyContent: 'center' },
 });

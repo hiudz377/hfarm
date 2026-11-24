@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
   linkWrap: { alignSelf: 'center' },
   link: { fontSize: 14, color: colors.primary },
   expired: { fontSize: 13, color: colors.primaryDark, backgroundColor: colors.primarySoft, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, textAlign: 'center', overflow: 'hidden' },
-  error: { fontSize: 13, color: colors.danger, backgroundColor: '#FDECEA', borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, lineHeight: 18, overflow: 'hidden' },
+  error: { fontSize: 13, color: colors.danger, backgroundColor: colors.dangerSoft, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, lineHeight: 18, overflow: 'hidden' },
   fallback: { marginTop: space.xs },
   dismiss: { alignSelf: 'center', marginTop: space.sm },
   dismissText: { fontSize: 14, color: colors.muted, textDecorationLine: 'underline' },

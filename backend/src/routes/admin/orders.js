@@ -4,6 +4,8 @@ const { wrap, httpError, paging } = require('../../utils');
 const {
   changeOrderStatus, getOrderDetail, bulkOrderAction, orderCounts, TRANSITIONS,
 } = require('../../services/orders');
+const { confirmPaymentManually } = require('../../services/payments');
+const { listEvents, addEvent, deleteEvent } = require('../../services/tracking');
 
 const PAYMENT_STATUSES = ['UNPAID', 'PAID', 'PARTIALLY_REFUNDED', 'REFUNDED', 'FAILED'];
 
@@ -51,7 +53,27 @@ router.post('/bulk', wrap(async (req, res) => {
   res.json(await bulkOrderAction(ids, action, req.user.id, { note, carrier, tracking_code }));
 }));
 
-router.get('/:id', wrap(async (req, res) => res.json(await getOrderDetail(req.params.id))));
+// Chi tiết đơn kèm hạn thanh toán (đơn chuyển khoản) và hành trình do nhân viên ghi
+router.get('/:id', wrap(async (req, res) => {
+  const detail = await getOrderDetail(req.params.id);
+  res.json({ ...detail, shipment_events: await listEvents(detail.id) });
+}));
+
+// Nhân viên xác nhận đã nhận tiền chuyển khoản: { transaction_code?, note? }
+router.post('/:id/confirm-payment', wrap(async (req, res) => {
+  await confirmPaymentManually(req.params.id, req.user.id, req.body || {});
+  res.json(await getOrderDetail(req.params.id));
+}));
+
+// Ghi mốc hành trình khi đơn đang giao: { title, location? }
+router.post('/:id/shipment-events', wrap(async (req, res) => {
+  const r = await addEvent(req.params.id, req.user.id, req.body || {});
+  res.status(201).json(r);
+}));
+router.delete('/:id/shipment-events/:eventId', wrap(async (req, res) => {
+  await deleteEvent(req.params.id, req.params.eventId);
+  res.json({ message: 'Đã xóa' });
+}));
 
 // { status, note, carrier?, tracking_code? } (đổi đúng một bước; CMS dùng POST /bulk)
 router.patch('/:id/status', wrap(async (req, res) => {

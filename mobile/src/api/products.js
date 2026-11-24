@@ -19,6 +19,19 @@ export const fetchProducts = ({ q, categoryId, filters, page, limit }) =>
     })
     .then((r) => r.data);
 
+// Các mục ở trang chủ: 'new' (mới về), 'bestseller' (bán chạy), 'sale' (đang giảm giá); chỉ lấy sản phẩm còn hàng.
+// -> { data, total, ... } cùng dạng với fetchProducts
+const COLLECTION_PARAMS = {
+  new: { sort: 'newest', in_stock: 1 },
+  bestseller: { sort: 'bestseller', in_stock: 1 },
+  sale: { sort: 'newest', in_stock: 1, on_sale: 1 },
+};
+export const fetchCollection = (kind, limit = 8) =>
+  api.get('/products', { params: { ...(COLLECTION_PARAMS[kind] ?? COLLECTION_PARAMS.new), page: 1, limit } }).then((r) => r.data);
+
+// GET /banners -> [{ id, title, subtitle, image_url, link_type: NONE|CATEGORY|PRODUCT|COLLECTION, link_value }] (rỗng = dùng banner mặc định)
+export const fetchBanners = () => api.get('/banners').then((r) => r.data);
+
 // GET /products/suggest?q=&limit= -> [{ id, name, price, thumbnail }] (gợi ý khi gõ ô tìm kiếm)
 export const fetchSuggestions = (q) => api.get('/products/suggest', { params: { q, limit: 6 } }).then((r) => r.data);
 

@@ -8,7 +8,7 @@ import { errMsg } from '@/api/client';
 import { fetchAddresses } from '@/api/addresses';
 import { fetchCart } from '@/api/cart';
 import { createOrder, quoteOrder } from '@/api/orders';
-import BankInfo from '@/components/BankInfo';
+import { fetchPaymentMethods } from '@/api/payments';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import KeyboardView from '@/components/KeyboardView';
@@ -19,7 +19,7 @@ import { goToTab } from '@/utils/nav';
 import { goneVariantId } from '@/utils/viMessage';
 import { PAYMENT_METHODS } from '@/utils/payment';
 import { ADDRESSES_KEY, CART_KEY, QUOTE_KEY, afterOrderPlaced, cartIssueCount, cartSignature, useCart } from '@/utils/useCart';
-import { money } from '@/utils/format';
+import { etaText, money } from '@/utils/format';
 import { colors, radius, space } from '@/utils/theme';
 
 const fullAddress = (a) => [a.address_detail, a.ward, a.district, a.province].filter(Boolean).join(', ');
@@ -33,10 +33,15 @@ function Section({ title, children }) {
   );
 }
 
-function Radio({ selected, title, children, onPress }) {
+function Radio({ selected, title, icon, children, onPress }) {
   return (
     <Pressable onPress={onPress} style={[styles.option, selected && styles.optionOn]} role="radio" aria-checked={selected}>
       <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={22} color={selected ? colors.primary : colors.muted} />
+      {icon ? (
+        <View style={[styles.optionIcon, selected && styles.optionIconOn]}>
+          <Ionicons name={icon} size={20} color={selected ? colors.white : colors.primary} />
+        </View>
+      ) : null}
       <View style={styles.optionBody}>
         <Text style={styles.optionTitle}>{title}</Text>
         {children}
@@ -76,12 +81,20 @@ export default function Checkout() {
   const [note, setNote] = useState('');
   const [coupon, setCoupon] = useState(() => (params.coupon ? String(params.coupon) : null));
 
-  // ---- tiền: luôn lấy từ /orders/quote (cùng hàm tính với POST /orders) ----
+  // Phương thức do server quyết định: chuyển khoản chỉ hiện khi cửa hàng đã cấu hình tài khoản ngân hàng
+  const methodsQ = useQuery({ queryKey: ['payment-methods'], queryFn: fetchPaymentMethods, staleTime: 5 * 60 * 1000 });
+  const available = (methodsQ.data?.methods ?? [{ value: 'COD' }]).map((m) => ({ ...PAYMENT_METHODS.find((p) => p.value === m.value), ...m }))
+    .filter((m) => m.title);
+  const bank = available.find((m) => m.value === 'BANK_TRANSFER');
+  const chosen = available.some((m) => m.value === method) ? method : 'COD'; // phương thức đã chọn bị tắt thì quay về COD
+
+  // ---- tiền: luôn lấy từ /orders/quote (cùng hàm tính với POST /orders). Có địa chỉ thì phí ship theo vùng của địa chỉ ----
   const quote = useQuery({
-    queryKey: [...QUOTE_KEY, cartSignature(cart.data), coupon ?? ''],
-    queryFn: () => quoteOrder({ couponCode: coupon }),
-    enabled: items.length > 0,
+    queryKey: [...QUOTE_KEY, cartSignature(cart.data), coupon ?? '', address?.id ?? ''],
+    queryFn: () => quoteOrder({ couponCode: coupon, addressId: address?.id }),
+    enabled: items.length > 0 && !addressesQ.isPending,
   });
+  const eta = etaText(quote.data?.shipping_zone);
   // Báo giá lỗi vì có sản phẩm đã ngừng bán (CMS ngừng bán khi đang nằm trong giỏ): chỉ cho quay lại giỏ để xóa
   const quoteMsg = quote.isError ? errMsg(quote.error) : null;
   const goneId = goneVariantId(quoteMsg);
@@ -145,7 +158,10 @@ export default function Checkout() {
     onSuccess: (order, vars) => {
       router.replace({
         pathname: '/order-success',
-        params: { code: order.order_code, total: String(order.total_amount), method: vars.paymentMethod },
+        params: {
+          id: String(order.id), code: order.order_code, total: String(order.total_amount), method: vars.paymentMethod,
+          eta: etaText(order.shipping_zone) ?? '',
+        },
       });
       afterOrderPlaced(queryClient);
     },
@@ -165,7 +181,7 @@ export default function Checkout() {
   const onPlace = () => {
     if (submitting.current || place.isPending || !canPlace) return;
     submitting.current = true;
-    place.mutate({ addressId: address.id, paymentMethod: method, couponCode: coupon, note: note.trim() });
+    place.mutate({ addressId: address.id, paymentMethod: chosen, couponCode: coupon, note: note.trim() });
   };
 
   // ---- trạng thái cả màn ----
@@ -175,7 +191,7 @@ export default function Checkout() {
     return <EmptyState icon="cloud-offline-outline" title="Không tải được giỏ hàng" message={errMsg(cart.error)} actionLabel="Thử lại" onAction={() => cart.refetch()} />;
   }
   if (!items.length) {
-    return <EmptyState icon="cart-outline" title="Giỏ hàng trống" message="Không có gì để thanh toán." actionLabel="Đi mua sắm" onAction={() => goToTab(router, '/')} />;
+    return <EmptyState icon="cart-outline" title="Giỏ hàng trống" message="Không có gì để thanh toán." actionLabel="Đi mua sắm" onAction={() => goToTab(router, '/shop')} />;
   }
 
   return (
@@ -216,12 +232,21 @@ export default function Checkout() {
         </Section>
 
         <Section title="Phương thức thanh toán">
-          {PAYMENT_METHODS.map((m) => (
-            <Radio key={m.value} selected={method === m.value} onPress={() => setMethod(m.value)} title={m.title}>
+          {available.map((m) => (
+            <Radio key={m.value} selected={chosen === m.value} onPress={() => setMethod(m.value)} title={m.title} icon={m.icon}>
               <Text style={styles.muted}>{m.hint}</Text>
             </Radio>
           ))}
-          {method === 'BANK_TRANSFER' ? <BankInfo /> : null}
+          {chosen === 'BANK_TRANSFER' && bank ? (
+            <View style={styles.hintBox}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
+              <Text style={styles.hintText}>
+                Sau khi đặt hàng, mã QR hiện ngay để bạn quét và chuyển đúng số tiền.
+                {' '}{bank.auto_confirm ? 'Đơn tự cập nhật khi tiền về.' : 'Cửa hàng sẽ xác nhận khi nhận được tiền.'}
+                {bank.hold_minutes ? ` Đơn được giữ ${bank.hold_minutes >= 60 ? `${Math.round(bank.hold_minutes / 60)} giờ` : `${bank.hold_minutes} phút`}, quá hạn chưa thanh toán sẽ tự hủy.` : ''}
+              </Text>
+            </View>
+          ) : null}
         </Section>
 
         <Section title="Ghi chú cho cửa hàng">
@@ -275,6 +300,12 @@ export default function Checkout() {
                 total={quote.data.total_amount}
                 dim={quote.isFetching}
               />
+              {eta ? (
+                <View style={styles.eta}>
+                  <Ionicons name="bicycle-outline" size={18} color={colors.primary} />
+                  <Text style={styles.etaText}>Dự kiến giao trong {eta}</Text>
+                </View>
+              ) : null}
             </>
           )}
         </Section>
@@ -299,7 +330,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: space.xl },
   flex: { flex: 1 },
-  banner: { backgroundColor: '#FDECEA', borderRadius: radius.md, padding: space.md, gap: space.sm, borderWidth: 1, borderColor: colors.danger },
+  hintBox: { flexDirection: 'row', gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  hintText: { flex: 1, fontSize: 12, color: colors.text, lineHeight: 17 },
+  optionIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
+  optionIconOn: { backgroundColor: colors.primary },
+  eta: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: space.md, borderRadius: radius.md, backgroundColor: colors.primarySoft },
+  etaText: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.primary },
+  banner: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md, gap: space.sm, borderWidth: 1, borderColor: colors.danger },
   bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   section: { padding: space.md, gap: space.sm },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.text },

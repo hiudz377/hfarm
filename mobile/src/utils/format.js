@@ -21,3 +21,9 @@ export function resolveImageUrl(url) {
   if (url.startsWith('/')) return API_ORIGIN + url;
   return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i, API_ORIGIN);
 }
+
+// Khoảng ngày giao: 2 và 5 -> "2–5 ngày" (gạch ngắn, không dấu cách nên không bị ngắt dòng giữa chừng); 2 và 2 -> "2 ngày"
+export const etaRange = (min, max) => (min === max ? `${min} ngày` : `${min}–${max} ngày`);
+
+// Từ shipping_zone của /orders/quote, đơn vừa đặt hoặc /shipping/estimate -> "2–5 ngày" (null nếu không có)
+export const etaText = (zone) => (zone && zone.eta_min_days != null ? etaRange(zone.eta_min_days, zone.eta_max_days) : null);

@@ -143,6 +143,18 @@ export default function FilterSheet({ visible, value, onApply, onClose }) {
                 aria-label="Chỉ hiện sản phẩm còn hàng"
               />
             </View>
+
+            <View style={styles.switchRow}>
+              <View style={styles.switchText}>
+                <Text style={styles.groupTitle}>Chỉ hiện sản phẩm đang giảm giá</Text>
+              </View>
+              <Switch
+                value={draft.onSale}
+                onValueChange={(onSale) => set({ onSale })}
+                trackColor={{ true: colors.primary }}
+                aria-label="Chỉ hiện sản phẩm đang giảm giá"
+              />
+            </View>
           </ScrollView>
 
           <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, space.lg) }]}>
@@ -160,8 +172,8 @@ const styles = StyleSheet.create({
   sheet: {
     maxHeight: '85%',
     backgroundColor: colors.surface,
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
   },
   header: {
     flexDirection: 'row',

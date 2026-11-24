@@ -1,16 +1,18 @@
 import { StyleSheet, View } from 'react-native';
-import { colors, radius } from '@/utils/theme';
+import { colors, radius, shadow } from '@/utils/theme';
 
-export default function Card({ children, style }) {
-  return <View style={[styles.card, style]}>{children}</View>;
+// clip = true: cắt nội dung theo góc bo (ví dụ ảnh sát mép). Lưu ý iOS không vẽ bóng khi cắt nội dung.
+export default function Card({ children, style, clip = false }) {
+  return <View style={[styles.card, clip && styles.clip, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    overflow: 'hidden',
+    ...shadow.card,
   },
+  clip: { overflow: 'hidden' },
 });

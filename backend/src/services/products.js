@@ -54,7 +54,7 @@ const marks = (list) => list.map(() => '?').join(',');
 
 // Danh sách sản phẩm có lọc + sắp xếp + phân trang. onlyActive = true cho khách hàng.
 // Bộ lọc: q, category_id, brand_id (nhiều giá trị cách nhau dấu phẩy), min_price, max_price,
-//         size_id, color_id (nhiều giá trị), in_stock=1. size/color/còn hàng phải cùng khớp MỘT biến thể đang bán.
+//         size_id, color_id (nhiều giá trị), in_stock=1, on_sale=1. size/color/còn hàng phải cùng khớp MỘT biến thể đang bán.
 async function listProducts(q, onlyActive) {
   const { page, limit, offset } = paging(q);
   const sort = q.sort === undefined || q.sort === '' ? 'newest' : String(q.sort);
@@ -84,6 +84,10 @@ async function listProducts(q, onlyActive) {
     if (colorIds.length) { cond.push(`v.color_id IN (${marks(colorIds)})`); params.push(...colorIds); }
     if (inStock) cond.push('COALESCE(i.quantity, 0) > 0');
     where.push(`EXISTS (SELECT 1 FROM product_variants v LEFT JOIN inventories i ON i.variant_id = v.id WHERE ${cond.join(' AND ')})`);
+  }
+  // on_sale=1: có biến thể đang bán với giá gốc cao hơn giá bán (cùng điều kiện hiện nhãn giảm giá trong app)
+  if (q.on_sale === '1' || q.on_sale === 'true') {
+    where.push('EXISTS (SELECT 1 FROM product_variants sv WHERE sv.product_id = p.id AND sv.is_active = 1 AND sv.compare_at_price > sv.price)');
   }
   const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
 

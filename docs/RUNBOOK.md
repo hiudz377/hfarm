@@ -10,6 +10,7 @@
 - Docker Desktop (cho Keycloak). MySQL cài trên máy (cổng 3306) với database `clothing_store` đã có dữ liệu.
 - Cài thư viện lần đầu hoặc sau khi `package.json` đổi: `npm install` trong `backend`, `web`, `mobile` (mobile dùng `npx expo install <gói>` để thêm gói).
 - File cấu hình: sao chép `backend/.env.example` -> `backend/.env`, `web/.env.example` -> `web/.env`, `mobile/.env.example` -> `mobile/.env` rồi sửa (mô tả từng biến: [ARCHITECTURE.md](ARCHITECTURE.md) mục 6). Các `.env` bị `.gitignore`.
+- **Sau khi lấy code mới (từ 2026-11-24)**: áp dụng các file trong `database/migrations/` lên database đang dùng (mục 8). Backend từ chối khởi động nếu thiếu và nói rõ file nào.
 - Cảnh báo: `database/schema.sql` **XÓA SẠCH mọi bảng** rồi tạo lại. Chỉ chạy trên database trống/thử nghiệm, KHÔNG chạy trên `clothing_store` đang có dữ liệu.
 
 ## 1. Chạy từ đầu (mỗi bước một cửa sổ PowerShell quản trị)
@@ -50,10 +51,35 @@ Container `keycloak-hfarm` (image `quay.io/keycloak/keycloak:26.8.1`, chạy `st
 | Tắt | `docker stop keycloak-hfarm` |
 | Xem log | `docker logs --tail 50 keycloak-hfarm` (theo dõi liên tục: `docker logs -f keycloak-hfarm`) |
 | Mở trang quản trị | http://localhost:8080 (đăng nhập bằng `admin` của realm master; KHÔNG dùng `admin_hfarm`, đó là tài khoản CMS) |
-| Tạo lại container, GIỮ dữ liệu (chỉ khi thật sự cần; Chưa xác minh trên máy thật) | `docker stop keycloak-hfarm` rồi `docker rm keycloak-hfarm` (chỉ xóa container, KHÔNG có `-v`) rồi `docker run -d --name keycloak-hfarm -p 8080:8080 -v hfarm_keycloak:/opt/keycloak/data -e KC_BOOTSTRAP_ADMIN_USERNAME=<ADMIN_USER> -e KC_BOOTSTRAP_ADMIN_PASSWORD=<ADMIN_PASSWORD> quay.io/keycloak/keycloak:26.8.1 start-dev`. Hai biến `KC_BOOTSTRAP_ADMIN_*` chỉ có tác dụng khi dữ liệu còn trống |
+| Tạo lại container, GIỮ dữ liệu (chỉ khi thật sự cần; Chưa xác minh trên máy thật) | `docker stop keycloak-hfarm` rồi `docker rm keycloak-hfarm` (chỉ xóa container, KHÔNG có `-v`) rồi `docker run -d --name keycloak-hfarm -p 8080:8080 -v hfarm_keycloak:/opt/keycloak/data -v "<THU_MUC_DU_AN>\keycloak\themes\hfarm:/opt/keycloak/themes/hfarm:ro" -e KC_BOOTSTRAP_ADMIN_USERNAME=<ADMIN_USER> -e KC_BOOTSTRAP_ADMIN_PASSWORD=<ADMIN_PASSWORD> quay.io/keycloak/keycloak:26.8.1 start-dev`. Hai biến `KC_BOOTSTRAP_ADMIN_*` chỉ có tác dụng khi dữ liệu còn trống |
 
 - Container từng tự thoát (mã 143) giữa phiên làm việc: gặp thì `docker start keycloak-hfarm`.
 - Cổng 8080 còn bị container khác của chủ dự án (nginx `web-test`, đang tắt) khai báo; **không bật `web-test` cùng lúc**. Container `knn-local-api` (đang tắt) khai báo cổng 3000, trùng cổng backend.
+
+### Giao diện đăng nhập Keycloak (theme `hfarm`)
+
+Theme nằm ở `keycloak/themes/hfarm/login/`: kế thừa theme mặc định `keycloak.v2`, chỉ thêm CSS xanh rừng + nền kem (màu lấy từ `mobile/src/utils/theme.js`), logo lá (cùng biểu tượng với `web/public/favicon.svg`) và vài câu chữ; **không ghi đè file `.ftl` nào** nên nâng cấp Keycloak ít khi làm vỡ. Áp dụng cho trang đăng nhập, đăng ký, quên mật khẩu, đăng xuất, trang lỗi của mọi client (CMS và app mobile). Chưa làm theme email và account console.
+
+**Cài vào container** (1 lần, không cần dừng Keycloak, không đụng volume `hfarm_keycloak`). Ở thư mục gốc dự án:
+
+```powershell
+docker cp "keycloak\themes\hfarm" keycloak-hfarm:/opt/keycloak/themes/
+```
+
+Chạy lại đúng lệnh này sau mỗi lần sửa file trong theme (`start-dev` không cache theme, F5 / Ctrl+F5 là thấy). Container bị tạo lại thì mất theme: chép lại, hoặc tạo lại bằng lệnh có `-v ...:/opt/keycloak/themes/hfarm` ở bảng trên (khi đó sửa file là có hiệu lực ngay, khỏi chép).
+
+**Chọn theme cho realm** (trang quản trị http://localhost:8080, đăng nhập bằng `admin` của realm master, chọn realm `hfarm`):
+1. Realm settings -> Themes -> **Login theme = `hfarm`** -> Save.
+2. Để chữ hiện tiếng Việt: Realm settings -> Localization -> **Internationalization = On**, Supported locales = Tiếng Việt (thêm English nếu muốn có ô chọn ngôn ngữ), **Default locale = Tiếng Việt** -> Save. Realm tắt Internationalization thì Keycloak luôn hiện tiếng Anh (theme vẫn áp dụng, chữ "Welcome back", "Sign In"...). Nếu chọn cả English, trình duyệt gửi `Accept-Language: en` vẫn thấy tiếng Anh.
+3. Kiểm tra: mở http://localhost:5173 (chưa đăng nhập) sẽ thấy trang mới. Hoặc `curl.exe -s "http://localhost:8080/realms/hfarm/protocol/openid-connect/auth?client_id=hfarm-web&redirect_uri=http%3A%2F%2Flocalhost%3A5173%2F&response_type=code&scope=openid&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256"` rồi tìm `login/hfarm/css/hfarm.css` trong HTML (trang cũ chỉ có `login/keycloak.v2/css/styles.css`).
+
+**Quay lại giao diện cũ**: Login theme = `keycloak.v2`. **Gỡ hẳn theme**: `docker exec keycloak-hfarm rm -rf /opt/keycloak/themes/hfarm` (sau khi realm đã chọn lại theme khác).
+
+**Sửa giao diện**: màu ở khối `:root` đầu `resources/css/hfarm.css`; câu chữ ở `messages/messages_vi.properties` (và `messages_en.properties`), chỉ ghi các câu muốn đổi, câu khác dùng bản có sẵn của Keycloak; ảnh ở `resources/img/` (`logo.svg`, `favicon.ico`). Muốn thử trước mà không đụng Keycloak thật: chạy một container Keycloak riêng (tên, cổng, không có volume), nạp realm từ file JSON có `"loginTheme": "hfarm"`, rồi `docker rm -f` khi xong (đây là cách đã dùng để kiểm tra, `docs/STATUS.md` mục 2.1):
+
+```powershell
+docker run -d --name hfarm-kc-theme -p 127.0.0.1:18082:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=<TEN_TAM> -e KC_BOOTSTRAP_ADMIN_PASSWORD=<MAT_KHAU_NGAU_NHIEN> -v "<THU_MUC_CHUA_JSON_REALM>:/opt/keycloak/data/import" -v "<THU_MUC_DU_AN>\keycloak\themes\hfarm:/opt/keycloak/themes/hfarm:ro" quay.io/keycloak/keycloak:26.8.1 start-dev --import-realm
+```
 
 ## 3. Khi đổi mạng (IP máy tính đổi)
 
@@ -97,6 +123,11 @@ netsh advfirewall firewall add rule name="HFarm Keycloak 8080" dir=in action=all
 | API trả **403** `Không đủ quyền` | Token đúng nhưng thiếu role `admin`/`staff` (hoặc staff gọi route chỉ admin) | Gán realm role ở Keycloak (Users -> Role mapping), đăng nhập lại để token mới có role |
 | API trả **403** `Tài khoản đã bị khóa` | `users.status` không phải `ACTIVE` | Admin mở khóa ở CMS (Khách hàng) hoặc sửa bảng `users` |
 | API trả **409** `Email của tài khoản này đã được dùng bởi một tài khoản khác...` | Bảng `users` đã có dòng cùng email với `keycloak_id` khác (ví dụ tạo ở chế độ dev, hoặc tài khoản Keycloak đã xóa rồi đăng ký lại) | Đổi/xóa email dòng cũ trong `users` (cân nhắc kỹ, có thể có đơn hàng gắn vào dòng đó) |
+| Backend thoát ngay với **`Database chưa áp dụng migration: 001_...sql`** | Database chưa chạy các file trong `database/migrations/` (thiếu bảng/cột mới) | Làm theo mục 8, rồi khởi động lại backend |
+| App không hiện lựa chọn "Chuyển khoản"; đặt đơn chuyển khoản báo `Cửa hàng chưa bật thanh toán chuyển khoản` | Thiếu một trong `BANK_BIN`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME` trong `backend/.env` (hoặc chưa restart backend) | Điền đủ, restart backend; kiểm tra `GET /api/payments/methods` có `BANK_TRANSFER` (mục 9) |
+| Khách chuyển khoản xong mà đơn vẫn "Chờ thanh toán" | Webhook chưa bật/chưa tới được backend, hoặc nội dung chuyển khoản thiếu mã đơn | Xem CMS > Giao dịch ngân hàng; chưa có webhook thì mở đơn bấm "Xác nhận đã nhận tiền" (mục 9) |
+| Webhook trả 401 / 503 | 401: khóa gửi lên khác `PAYMENT_WEBHOOK_KEY`; 503: chưa đặt `PAYMENT_WEBHOOK_KEY` | Đặt/khớp khóa ở cả `backend/.env` và cấu hình webhook SePay, restart backend |
+| Đơn chuyển khoản tự bị hủy | Quá `PAYMENT_HOLD_MINUTES` (mặc định 24 giờ) mà chưa nhận tiền và đơn còn "Chờ xác nhận"; hàng và lượt mã giảm giá đã được hoàn | Bình thường. Muốn giữ lâu hơn: tăng `PAYMENT_HOLD_MINUTES`; tắt hẳn: `PAYMENT_EXPIRE_JOB=false`. Tiền về sau khi hủy hiện ở Giao dịch ngân hàng (ORDER_CLOSED) để hoàn tiền |
 | Lỗi `EADDRINUSE` / "port đã bị dùng" | Cổng 3000/5173/8081/8080 đã có tiến trình khác (container `knn-local-api` dùng 3000, `web-test` dùng 8080, backend/Vite chạy hai lần) | `netstat -ano \| findstr :3000` để lấy PID, `Get-Process -Id <PID>` để biết là gì, tắt đúng tiến trình đó; `docker ps` xem container. Expo tự đề nghị cổng khác (8082...) thì redirect URI đổi theo: phải cập nhật Keycloak |
 | Điện thoại: "Không kết nối được máy chủ" | Khác Wi-Fi/cách ly thiết bị; tường lửa; `EXPO_PUBLIC_API_URL` còn IP cũ hoặc quên `--clear`; VPN làm IP sai; backend không chạy | Trên trình duyệt điện thoại mở `http://<IP_MAY_TINH>:3000/api/products?limit=1`. Sửa theo mục 3 và 4 |
 | Điện thoại: "Không kết nối được máy chủ đăng nhập" | Điện thoại không tới được Keycloak (`EXPO_PUBLIC_KEYCLOAK_URL` sai, cổng 8080 bị chặn, Keycloak tắt) | Mở `http://<IP_MAY_TINH>:8080` trên điện thoại; mục 2 và 4 |
@@ -112,6 +143,8 @@ netsh advfirewall firewall add rule name="HFarm Keycloak 8080" dir=in action=all
 | `npx expo lint` làm đổi `mobile/package.json` | Lệnh này tự cài eslint và thêm script `lint` | Đừng chạy, hoặc hoàn tác ngay (`npm uninstall` gói vừa cài, xóa `eslint.config.js`) |
 
 ## 6. Câu SQL kiểm tra (chỉ SELECT)
+
+> Từ 2026-11-24, thêm các câu về thanh toán/giao hàng ở cuối mục này.
 
 Chạy bằng MySQL Workbench hoặc `mysql -u <DB_USER> -p clothing_store -e "<câu lệnh>"`. **Chỉ SELECT.** Đừng chạy `database/schema.sql` trên database có dữ liệu (nó `DROP` mọi bảng).
 
@@ -152,6 +185,16 @@ SELECT * FROM payments WHERE order_id = <ID_DON>;
 SELECT * FROM shipments WHERE order_id = <ID_DON>;
 ```
 
+### Thanh toán / giao hàng (chỉ SELECT)
+```sql
+-- Đơn chuyển khoản đang chờ tiền, sắp hết hạn trước
+SELECT order_code, total_amount, payment_expires_at FROM orders WHERE payment_status = 'UNPAID' AND payment_expires_at IS NOT NULL AND status = 'PENDING' ORDER BY payment_expires_at;
+-- Giao dịch ngân hàng cần nhân viên xử lý
+SELECT id, provider_tx_id, amount, content, match_status, note FROM bank_transactions WHERE resolved = 0 ORDER BY id DESC;
+-- Vùng vận chuyển
+SELECT id, name, provinces, fee, free_over, eta_min_days, eta_max_days, is_default, is_active FROM shipping_zones;
+```
+
 ## 7. Docker Compose của dự án (`docker-compose.yml`, project `hfarm`)
 
 Chạy MySQL + backend + web CMS (nginx) mà không cần cài gì khác ngoài Docker. Cổng mặc định chọn để không đụng bản dev:
@@ -175,3 +218,48 @@ docker compose down             # dừng, GIỮ dữ liệu (volume hfarm-db, hf
 - **Mặc định là chế độ dev** (`AUTH_ENABLED=false`, CMS `VITE_AUTH_DISABLED=true`): **ai gọi được API đều là admin** và CORS mở cho mọi origin. Cổng `3100`, `3307`, `8088` được publish trên mọi giao diện mạng của máy. **Chỉ chạy thử trên máy mình, không mở ra Internet/mạng không tin cậy.** Mật khẩu root MySQL có giá trị mặc định ngay trong `docker-compose.yml`: đổi qua `DB_PASSWORD` trước khi dùng thật.
 - Dùng Keycloak với Compose (chưa thử, theo README): trong `.env` gốc đặt `AUTH_ENABLED=true`, `VITE_AUTH_DISABLED=false`, `KEYCLOAK_URL=http://host.docker.internal:8080` (địa chỉ container với tới được), `KEYCLOAK_REALM=hfarm`, `VITE_KEYCLOAK_URL=http://localhost:8080`, `VITE_KEYCLOAK_REALM=hfarm`, `VITE_KEYCLOAK_CLIENT_ID=hfarm-web`. Suy ra từ code (Chưa xác minh): cần thêm `KEYCLOAK_ISSUERS=http://localhost:8080/realms/hfarm` (token do trình duyệt lấy mang issuer `localhost`) và `CORS_ORIGIN=http://localhost:8088` (mặc định khi bật xác thực chỉ cho `http://localhost:5173`), và client `hfarm-web` phải có redirect URI/web origin `http://localhost:8088`.
 - Mang dữ liệu từ MySQL máy sang Docker bằng `mysqldump` (README): lệnh thông dụng, **chưa thử** trên dữ liệu thật.
+
+## 8. Migration (`database/migrations/`)
+
+Từ 2026-11-24 mọi thay đổi cấu trúc nằm ở đây (không sửa `schema.sql`). Mỗi file **chỉ thêm**, chạy **đúng một lần** theo thứ tự số; chạy lần hai sẽ báo `Duplicate column`/`already exists` (vô hại nhưng các lệnh sau lỗi đó không chạy tiếp).
+
+| File | Nội dung |
+|---|---|
+| `001_payment_shipping.sql` | `orders.payment_expires_at`; bảng `bank_transactions`, `shipping_zones` (kèm vùng mặc định "Toàn quốc" 30.000 ₫, miễn phí từ 500.000 ₫, 2-5 ngày), `shipment_events` |
+| `002_banners.sql` | bảng `banners` |
+
+**Áp dụng lên database đang có dữ liệu** (ví dụ `clothing_store`):
+1. Sao lưu trước: `cmd /c "mysqldump -u <DB_USER> -p clothing_store > backup-truoc-migration.sql"` (PowerShell không có toán tử `<` nên bọc `cmd /c`; nếu không có `mysqldump` trong PATH thì dùng MySQL Workbench: Server > Data Export).
+2. Chạy từng file: `cmd /c "mysql -u <DB_USER> -p clothing_store < database\migrations\001_payment_shipping.sql"` rồi `002_banners.sql`. Hoặc trong MySQL Workbench: chọn schema `clothing_store` làm mặc định (nháy đúp), File > Open SQL Script, chọn file, chạy.
+3. Kiểm tra: `SHOW TABLES;` có `bank_transactions`, `shipping_zones`, `shipment_events`, `banners`; `SELECT * FROM shipping_zones;` có 1 dòng mặc định.
+4. Khởi động lại backend (hết báo thiếu migration).
+
+Docker Compose: volume MỚI tự chạy các migration (xem `docker-compose.yml`); volume ĐÃ có dữ liệu thì áp dụng tay: `docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" clothing_store' < database/migrations/001_payment_shipping.sql` (chạy trong cmd hoặc Git Bash, không phải PowerShell). Đã thử: Docker volume mới tự có đủ bảng, vùng mặc định và dữ liệu tiếng Việt đúng (UTF-8); **chưa thử** áp dụng tay lên volume cũ.
+
+Làm thử trên database tạm (không đụng dữ liệu thật): dựng từ `schema.sql` đã đổi tên database (hoặc tạo DB rỗng + chạy `schema.sql` đổi tên), chạy hai migration, trỏ backend bằng `DB_NAME` trong môi trường.
+
+## 9. Thanh toán QR, webhook và giao hàng
+
+### 9.1 Bật chuyển khoản VietQR
+1. Trong `backend/.env` điền (giá trị THẬT của cửa hàng, không đưa lên Git): `BANK_BIN` (mã NAPAS 6 số của ngân hàng, ví dụ Vietcombank 970436), `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME` (tên chủ tài khoản không dấu), tùy chọn `BANK_NAME`, `PAYMENT_HOLD_MINUTES`.
+2. Restart backend. Kiểm tra: `Invoke-RestMethod http://localhost:3000/api/payments/methods` phải có `BANK_TRANSFER`.
+3. **Quét thử bằng app ngân hàng thật**: đặt một đơn nhỏ trong app, quét QR, xem app ngân hàng có điền sẵn đúng tài khoản, số tiền và nội dung (mã đơn) không. **Chưa quét thử bằng app ngân hàng thật** (chỉ giải mã ảnh QR bằng thư viện và kiểm tra cấu trúc/CRC).
+
+### 9.2 Tự xác nhận tiền về bằng webhook SePay (tùy chọn)
+1. Đặt `PAYMENT_WEBHOOK_KEY` (chuỗi dài ngẫu nhiên) trong `backend/.env`, restart backend.
+2. Ở SePay (https://sepay.vn): liên kết tài khoản ngân hàng, tạo webhook: URL `https://<địa-chỉ-công-khai-của-backend>/api/payments/webhook/sepay`, kiểu xác thực **API Key** với giá trị đúng `PAYMENT_WEBHOOK_KEY`, chỉ gửi giao dịch tiền vào. Backend phải truy cập được từ Internet (dev: dùng đường hầm như cloudflared/ngrok; không mở dev ra Internet khi `AUTH_ENABLED=false`). **Chưa thử với SePay thật**: định dạng đã đối chiếu tài liệu SePay và thử bằng dữ liệu giả lập.
+3. Thử không cần SePay (PowerShell, giá trị giả; đổi mã đơn và số tiền):
+```
+$h = @{ Authorization = "Apikey <PAYMENT_WEBHOOK_KEY>" }
+$b = @{ id = 1001; transferType = "in"; transferAmount = 230000; content = "HT2026112412345"; accountNumber = "<BANK_ACCOUNT_NO>"; transactionDate = "2026-11-24 10:00:00" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:3000/api/payments/webhook/sepay -Headers $h -ContentType "application/json" -Body $b
+```
+Trả `{ success: true, result: "MATCHED" }` nếu đúng đơn/đúng tiền; gửi lại cùng `id` trả `DUPLICATE` (không xử lý lần hai). Làm trên DB tạm, đừng làm trên đơn thật.
+4. Hằng ngày: CMS > **Giao dịch ngân hàng** (chuông "Cần xử lý" có số): tiền không khớp, chuyển thiếu/dư/trùng, tiền về sau khi đơn đã hủy. Hoàn tiền bằng app ngân hàng rồi bấm "Đã xử lý".
+5. Chưa có webhook: mở đơn trong CMS, đối chiếu sao kê, bấm "Xác nhận đã nhận tiền". Đừng giao đơn chuyển khoản còn cảnh báo "Chờ khách chuyển khoản".
+
+### 9.3 Phí ship, hành trình, tem
+- CMS > **Vận chuyển** (admin sửa): thêm vùng, gõ tên tỉnh/thành (Enter để thêm), phí, ngưỡng miễn phí, số ngày giao. Tỉnh không thuộc vùng nào dùng vùng "Mặc định". Đổi phí chỉ ảnh hưởng đơn đặt sau đó.
+- Đơn đang giao: mở chi tiết, thêm mốc ("Đã đến kho phân loại...") để khách xem trong app (Chi tiết đơn > Theo dõi đơn hàng). Tra cứu công khai: `GET /api/tracking/<mã vận đơn>`.
+- **In phiếu giao hàng** (chi tiết đơn): có mã QR của mã vận đơn và dòng cần thu (COD) hoặc "Đã thanh toán". **Chưa thử in ra giấy/máy in thật.**
+- Banner trang chủ: CMS > **Banner** (admin), ảnh ngang 1200x600. Không có banner nào thì app hiện banner mặc định.

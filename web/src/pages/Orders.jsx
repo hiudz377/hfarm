@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, App, Button, Card, Collapse, Descriptions, Drawer, Dropdown, Empty, Input, Select, Space, Steps, Table,
+  Alert, App, Button, Card, Collapse, Descriptions, Drawer, Dropdown, Empty, Input, Modal, Select, Space, Steps, Table,
   Tabs, Tag, Timeline, Typography,
 } from 'antd';
 import {
-  CarOutlined, CheckCircleOutlined, CheckOutlined, CloseCircleOutlined, EllipsisOutlined, EyeOutlined,
-  PrinterOutlined, ReloadOutlined, RollbackOutlined,
+  BankOutlined, CarOutlined, CheckCircleOutlined, CheckOutlined, CloseCircleOutlined, DeleteOutlined, EllipsisOutlined,
+  EyeOutlined, PrinterOutlined, ReloadOutlined, RollbackOutlined,
 } from '@ant-design/icons';
+import QRCode from 'qrcode';
 import api, { errMsg } from '../api';
 import {
   actionsOf, dangerTitle, dateTime, money, nextActionOf, NEXT_ACTIONS, ORDER_ACTIONS, ORDER_GROUPS, ORDER_STATUS,
@@ -50,6 +51,10 @@ export default function Orders() {
   const [detail, setDetail] = useState(null);
   const [note, setNote] = useState('');
   const [ship, setShip] = useState({ carrier: '', tracking_code: '' });
+  const [pay, setPay] = useState(null); // hộp xác nhận đã nhận tiền: { code, note } | null
+  const [payBusy, setPayBusy] = useState(false);
+  const [evt, setEvt] = useState({ title: '', location: '' }); // ô thêm mốc hành trình
+  const [evtBusy, setEvtBusy] = useState(false);
   const seq = useRef(0);
 
   const params = useMemo(() => {
@@ -98,7 +103,44 @@ export default function Orders() {
     try {
       setNote('');
       setShip({ carrier: '', tracking_code: '' });
+      setEvt({ title: '', location: '' });
       setDetail((await api.get(`/admin/orders/${id}`)).data);
+    } catch (e) { message.error(errMsg(e)); }
+  };
+
+  // Tải lại chi tiết đơn đang mở (kèm hành trình) sau khi ghi
+  const reloadDetail = async () => {
+    setDetail((await api.get(`/admin/orders/${detail.id}`)).data);
+    await load(true);
+  };
+
+  const confirmPayment = async () => {
+    setPayBusy(true);
+    try {
+      await api.post(`/admin/orders/${detail.id}/confirm-payment`, { transaction_code: pay.code.trim() || undefined, note: pay.note.trim() || undefined });
+      message.success('Đã xác nhận nhận tiền');
+      setPay(null);
+      window.dispatchEvent(new Event('hfarm:orders-updated'));
+      await reloadDetail();
+    } catch (e) { message.error(errMsg(e)); }
+    finally { setPayBusy(false); }
+  };
+
+  const addEvent = async () => {
+    if (!evt.title.trim()) { message.warning('Hãy nhập nội dung hành trình'); return; }
+    setEvtBusy(true);
+    try {
+      await api.post(`/admin/orders/${detail.id}/shipment-events`, { title: evt.title.trim(), location: evt.location.trim() || undefined });
+      setEvt({ title: '', location: '' });
+      await reloadDetail();
+    } catch (e) { message.error(errMsg(e)); }
+    finally { setEvtBusy(false); }
+  };
+
+  const removeEvent = async (eventId) => {
+    try {
+      await api.delete(`/admin/orders/${detail.id}/shipment-events/${eventId}`);
+      await reloadDetail();
     } catch (e) { message.error(errMsg(e)); }
   };
 
@@ -177,12 +219,16 @@ export default function Orders() {
     runAction(action, ids);
   };
 
-  const printDeliverySlip = () => {
+  const printDeliverySlip = async () => {
+    // Mở cửa sổ ngay trong cú bấm (trình duyệt mới cho), tạo mã QR xong mới ghi nội dung
     const printWindow = window.open('', '_blank', 'width=800,height=700');
     if (!printWindow) {
       message.error('Trình duyệt đã chặn cửa sổ in. Hãy cho phép cửa sổ bật lên rồi thử lại.');
       return;
     }
+    // QR chứa mã vận đơn: người giao/kho quét để đối chiếu nhanh (chưa có mã vận đơn thì in mã đơn)
+    const qrText = detail.shipment?.tracking_code || detail.order_code;
+    const qrImage = await QRCode.toDataURL(qrText, { margin: 1, width: 220, errorCorrectionLevel: 'M' }).catch(() => null);
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[character]);
@@ -195,8 +241,11 @@ export default function Orders() {
       </tr>`).join('');
     const address = [detail.shipping_address, detail.ward, detail.district, detail.province]
       .filter(Boolean).map(escapeHtml).join(', ');
+    // COD: người giao thu tiền. Đã trả: không thu. Chuyển khoản chưa nhận được tiền: ghi rõ để người giao không thu nhầm.
+    const isCod = detail.payment?.payment_method === 'COD';
+    const dueLabel = detail.payment_status === 'PAID' ? 'Thanh toán' : isCod ? 'Thu hộ (COD)' : 'Chưa nhận chuyển khoản';
     const amountDue = detail.payment_status === 'PAID'
-      ? '<strong>Đã thanh toán</strong>'
+      ? '<strong>Đã thanh toán, không thu tiền</strong>'
       : `<strong>${escapeHtml(money(detail.total_amount))}</strong>`;
     const tracking = detail.shipment?.tracking_code
       ? `<div class="section"><strong>Mã vận đơn:</strong> ${escapeHtml(detail.shipment.tracking_code)}${detail.shipment.carrier ? ` · ${escapeHtml(detail.shipment.carrier)}` : ''}</div>`
@@ -216,15 +265,23 @@ export default function Orders() {
         th { background: #f3f5f3; }
         .number { text-align: right; white-space: nowrap; }
         .total { margin-top: 14px; text-align: right; font-size: 16px; }
+        .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .qr { text-align: center; font-size: 10px; color: #555; }
+        .qr img { width: 96px; height: 96px; display: block; }
       </style></head><body>
-        <h1>Phiếu giao hàng</h1>
-        <div class="muted">HFarm · Đơn ${escapeHtml(detail.order_code)}</div>
+        <div class="head">
+          <div>
+            <h1>Phiếu giao hàng</h1>
+            <div class="muted">HFarm · Đơn ${escapeHtml(detail.order_code)}</div>
+          </div>
+          ${qrImage ? `<div class="qr"><img src="${qrImage}" alt="QR">${escapeHtml(qrText)}</div>` : ''}
+        </div>
         ${tracking}
         <div class="section"><strong>Người nhận:</strong> ${escapeHtml(detail.recipient_name)} · ${escapeHtml(detail.recipient_phone)}<br>
         <strong>Địa chỉ:</strong> ${address}</div>
         <table><thead><tr><th>Sản phẩm</th><th>SKU</th><th class="number">SL</th><th class="number">Thành tiền</th></tr></thead>
         <tbody>${itemRows}</tbody></table>
-        <div class="total">Cần thu: ${amountDue}</div>
+        <div class="total">${dueLabel}: ${amountDue}</div>
         <script>window.onload = function () { window.print(); };</script>
       </body></html>`);
     printWindow.document.close();
@@ -315,6 +372,9 @@ export default function Orders() {
   const stage = detail ? STAGE[detail.status] : undefined;
   const detailNext = detail ? nextActionOf(detail.status) : null;
   const detailMore = detail ? actionsOf(detail.status).filter((a) => !NEXT_ACTIONS.includes(a)) : [];
+  // Đơn chuyển khoản/online chưa nhận được tiền (và còn hiệu lực)
+  const needPay = !!detail && detail.payment?.payment_method !== 'COD' && detail.payment_status === 'UNPAID'
+    && !['CANCELLED', 'RETURNED'].includes(detail.status);
 
   return (
     <>
@@ -401,6 +461,21 @@ export default function Orders() {
                 message={detail.status === 'CANCELLED' ? 'Đơn đã bị hủy' : 'Đơn đã hoàn trả'} />
             )}
 
+            {needPay && (
+              <Alert type="warning" showIcon icon={<BankOutlined />} style={{ marginBottom: 16 }}
+                message="Chờ khách chuyển khoản"
+                description={(
+                  <>
+                    Cần nhận <b>{money(detail.total_amount)}</b>, nội dung chuyển khoản <Typography.Text code copyable>{detail.order_code}</Typography.Text>.
+                    {detail.payment_expires_at && detail.status === 'PENDING'
+                      ? ` Quá ${dateTime(detail.payment_expires_at)} mà chưa nhận được tiền thì đơn tự hủy và hoàn kho.`
+                      : ' Đơn đã xác nhận nên không tự hủy; hãy cân nhắc trước khi giao.'}
+                    {' '}Khi tiền về, hệ thống tự đánh dấu nếu đã bật webhook; chưa bật thì bấm xác nhận sau khi kiểm tra sao kê.
+                  </>
+                )}
+                action={<Button size="small" type="primary" onClick={() => setPay({ code: '', note: '' })}>Xác nhận đã nhận tiền</Button>} />
+            )}
+
             {(detailNext || detailMore.length > 0) && (
               <div className="action-panel">
                 <Input.TextArea rows={2} placeholder="Ghi chú cho lịch sử đơn (không bắt buộc)" value={note}
@@ -454,6 +529,13 @@ export default function Orders() {
               <Descriptions.Item label="Tài khoản">{detail.customer_name || detail.customer_email}</Descriptions.Item>
               <Descriptions.Item label="Thanh toán">
                 {PAYMENT_METHOD[detail.payment?.payment_method] || detail.payment?.payment_method} - {PAYMENT_STATUS[detail.payment_status]}
+                {detail.payment?.paid_at && detail.payment_status === 'PAID' && (
+                  <div className="cell-sub">
+                    {dateTime(detail.payment.paid_at)}
+                    {detail.payment.provider === 'MANUAL' ? ' · nhân viên xác nhận' : detail.payment.provider ? ` · ${detail.payment.provider}` : ''}
+                    {detail.payment.transaction_code ? ` · mã GD ${detail.payment.transaction_code}` : ''}
+                  </div>
+                )}
               </Descriptions.Item>
               {detail.shipment && (
                 <Descriptions.Item label="Vận chuyển">
@@ -481,7 +563,41 @@ export default function Orders() {
               <Descriptions.Item label="Tổng cộng"><b>{money(detail.total_amount)}</b></Descriptions.Item>
             </Descriptions>
 
-            <Typography.Text strong>Lịch sử</Typography.Text>
+            {detail.shipment && (
+              <div style={{ marginTop: 16 }}>
+                <Typography.Text strong>Hành trình giao hàng</Typography.Text>
+                {detail.status === 'SHIPPING' && (
+                  <Space.Compact style={{ width: '100%', marginTop: 8 }}>
+                    <Input placeholder="Ví dụ: Đã đến kho phân loại Hà Nội" maxLength={200} value={evt.title}
+                      onChange={(e) => setEvt({ ...evt, title: e.target.value })} onPressEnter={addEvent} />
+                    <Input placeholder="Địa điểm (không bắt buộc)" maxLength={150} style={{ width: 200 }} value={evt.location}
+                      onChange={(e) => setEvt({ ...evt, location: e.target.value })} onPressEnter={addEvent} />
+                    <Button type="primary" loading={evtBusy} onClick={addEvent}>Thêm</Button>
+                  </Space.Compact>
+                )}
+                {detail.shipment_events?.length ? (
+                  <Timeline style={{ marginTop: 12 }} items={detail.shipment_events.map((e) => ({
+                    children: (
+                      <>
+                        <b>{e.title}</b>{e.location ? ` · ${e.location}` : ''}
+                        <div style={{ color: '#888' }}>
+                          {dateTime(e.created_at)}{e.created_by_name ? ` · ${e.created_by_name}` : ''}
+                          {detail.status === 'SHIPPING' && (
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />} aria-label="Xóa mốc hành trình" onClick={() => removeEvent(e.id)} />
+                          )}
+                        </div>
+                      </>
+                    ),
+                  }))} />
+                ) : (
+                  <div className="cell-sub" style={{ marginTop: 8 }}>
+                    {detail.status === 'SHIPPING' ? 'Chưa có mốc nào. Khách thấy các mốc này trong app (mục Theo dõi đơn hàng).' : 'Chưa ghi mốc nào.'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Typography.Text strong style={{ display: 'block', marginTop: 16 }}>Lịch sử</Typography.Text>
             <Timeline style={{ marginTop: 12 }} items={detail.history.map((h) => ({
               children: (
                 <>
@@ -494,6 +610,20 @@ export default function Orders() {
           </>
         )}
       </Drawer>
+
+      <Modal open={!!pay} title="Xác nhận đã nhận tiền chuyển khoản" okText="Xác nhận đã nhận" cancelText="Hủy" confirmLoading={payBusy}
+        onOk={confirmPayment} onCancel={() => setPay(null)} destroyOnHidden>
+        {pay && detail && (
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Alert type="info" showIcon
+              message={`Chỉ xác nhận sau khi đã thấy ${money(detail.total_amount)} trong sao kê, nội dung ${detail.order_code}.`} />
+            <Input placeholder="Mã giao dịch ngân hàng (không bắt buộc)" maxLength={150} value={pay.code}
+              onChange={(e) => setPay({ ...pay, code: e.target.value })} />
+            <Input placeholder="Ghi chú (không bắt buộc)" maxLength={300} value={pay.note}
+              onChange={(e) => setPay({ ...pay, note: e.target.value })} />
+          </Space>
+        )}
+      </Modal>
     </>
   );
 }

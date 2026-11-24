@@ -2,9 +2,10 @@ const crypto = require('crypto');
 const db = require('../db');
 const { httpError, tx } = require('../utils');
 const { changeStock } = require('./stock');
+const { feeFor } = require('./shipping');
+const { bankConfig, holdMinutes } = require('./paymentConfig');
 
-const SHIPPING_FEE = 30000;
-const FREE_SHIP_OVER = 500000;
+// Phí ship tính theo vùng của tỉnh nhận hàng (bảng shipping_zones, chỉnh trong CMS): xem services/shipping.js
 // Đơn vị vận chuyển mặc định khi nhân viên không nhập (đặt DEFAULT_CARRIER trong .env để đổi)
 const DEFAULT_CARRIER = process.env.DEFAULT_CARRIER || 'HFarm Express';
 
@@ -118,20 +119,27 @@ async function applyCoupon(exec, { code, subtotal, userId, forUpdate = false }) 
   return { coupon, discount };
 }
 
-// Phí ship + tổng tiền từ tạm tính và số tiền giảm
-function computeTotals(subtotal, discount) {
-  const shippingFee = subtotal >= FREE_SHIP_OVER ? 0 : SHIPPING_FEE;
+// Tổng tiền từ tạm tính, số tiền giảm và phí ship (đã tính theo vùng)
+function computeTotals(subtotal, discount, shippingFee) {
   return { subtotal, discount_amount: discount, shipping_fee: shippingFee, total_amount: subtotal - discount + shippingFee };
 }
 
 // Xem trước tiền (không ghi gì vào DB, không kiểm tra tồn kho).
-// body: { items?: [{variant_id, quantity}] (bỏ trống = lấy từ giỏ), coupon_code }
+// body: { items?: [{variant_id, quantity}] (bỏ trống = lấy từ giỏ), coupon_code, address_id? | province? }
+// Có địa chỉ thì phí ship theo vùng của tỉnh đó; không có thì dùng vùng mặc định. Trả thêm shipping_zone (tên vùng, số ngày giao).
 async function quoteOrder(userId, body) {
   const { items } = await resolveItems(userId, body);
   const lines = mergeLines(items);
   const { subtotal } = await priceLines(db, lines);
   const { discount } = await applyCoupon(db, { code: body.coupon_code, subtotal, userId });
-  return computeTotals(subtotal, discount);
+  let province = body.province || '';
+  if (body.address_id) {
+    const [a] = await db.query('SELECT province FROM addresses WHERE id = ? AND user_id = ?', [body.address_id, userId]);
+    if (!a.length) throw httpError(400, 'Địa chỉ không tồn tại');
+    province = a[0].province;
+  }
+  const ship = await feeFor(db, province, subtotal);
+  return { ...computeTotals(subtotal, discount, ship.fee), shipping_zone: ship };
 }
 
 // Đặt hàng. body: { address_id | (recipient_name, recipient_phone, province, district, ward, address_detail),
@@ -154,6 +162,8 @@ async function createOrder(userId, body) {
     addr = { name: recipient_name, phone: recipient_phone, province, district, ward, detail: address_detail };
   }
   const method = ['COD', 'BANK_TRANSFER', 'ONLINE'].includes(body.payment_method) ? body.payment_method : 'COD';
+  // Chưa cấu hình tài khoản ngân hàng thì không có QR/thông tin để khách chuyển: từ chối thay vì tạo đơn không trả tiền được
+  if (method === 'BANK_TRANSFER' && !bankConfig().configured) throw httpError(400, 'Cửa hàng chưa bật thanh toán chuyển khoản');
 
   return tx(async (conn) => {
     // Đặt từ giỏ: khóa dòng giỏ rồi đọc lại hàng trong giỏ ngay trong transaction. Hai yêu cầu cùng lúc cho một giỏ
@@ -170,7 +180,8 @@ async function createOrder(userId, body) {
 
     const { subtotal, detailed } = await priceLines(conn, orderLines);
     const { coupon, discount } = await applyCoupon(conn, { code: body.coupon_code, subtotal, userId, forUpdate: true });
-    const { shipping_fee: shippingFee, total_amount: total } = computeTotals(subtotal, discount);
+    const ship = await feeFor(conn, addr.province, subtotal);
+    const { shipping_fee: shippingFee, total_amount: total } = computeTotals(subtotal, discount, ship.fee);
 
     // Mã đơn có phần ngẫu nhiên nên hiếm khi trùng: trùng thì tự thử mã khác (lỗi trùng khóa chỉ hủy câu INSERT đó,
     // transaction vẫn tiếp tục) thay vì báo lỗi cho khách.
@@ -203,6 +214,10 @@ async function createOrder(userId, body) {
     }
 
     await conn.query('INSERT INTO payments (order_id, payment_method, amount) VALUES (?,?,?)', [orderId, method, total]);
+    // Chuyển khoản: có hạn thanh toán (giờ của MySQL); quá hạn mà chưa trả thì services/payments.js tự hủy đơn + hoàn kho
+    if (method === 'BANK_TRANSFER') {
+      await conn.query('UPDATE orders SET payment_expires_at = DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE id = ?', [holdMinutes(), orderId]);
+    }
     await conn.query(
       'INSERT INTO order_status_history (order_id, changed_by, old_status, new_status, note) VALUES (?,?,?,?,?)',
       [orderId, userId, null, 'PENDING', 'Khách đặt hàng']);
@@ -213,18 +228,21 @@ async function createOrder(userId, body) {
     }
     if (cartId) await conn.query("UPDATE carts SET status = 'CONVERTED' WHERE id = ?", [cartId]);
 
-    return { id: orderId, order_code: orderCode, subtotal, discount_amount: discount, shipping_fee: shippingFee, total_amount: total };
+    return { id: orderId, order_code: orderCode, subtotal, discount_amount: discount, shipping_fee: shippingFee, total_amount: total,
+      shipping_zone: ship };
   });
 }
 
 // Đổi trạng thái đơn. Hủy/hoàn trả thì tự cộng lại tồn kho.
 // opts: { carrier, tracking_code, ownerOnlyUserId } (ownerOnlyUserId: khách tự hủy đơn của mình)
+//       requireUnpaid: chỉ làm khi đơn còn UNPAID (tác vụ tự hủy đơn quá hạn: nếu tiền vừa về thì bỏ qua, không hủy đơn đã trả)
 async function changeOrderStatus(orderId, newStatus, userId, note, opts = {}) {
   return tx(async (conn) => {
     const [rows] = await conn.query('SELECT * FROM orders WHERE id = ? FOR UPDATE', [orderId]);
     const order = rows[0];
     if (!order) throw httpError(404, 'Không tìm thấy đơn hàng');
     if (opts.ownerOnlyUserId && order.user_id !== opts.ownerOnlyUserId) throw httpError(403, 'Không đủ quyền');
+    if (opts.requireUnpaid && order.payment_status !== 'UNPAID') throw httpError(409, 'Đơn đã được thanh toán');
     if (!(TRANSITIONS[order.status] || []).includes(newStatus))
       throw httpError(400, `Không thể chuyển từ "${STATUS_LABEL[order.status] || order.status}" sang "${STATUS_LABEL[newStatus] || newStatus}"`);
     let trackingCode = null;
@@ -240,6 +258,11 @@ async function changeOrderStatus(orderId, newStatus, userId, note, opts = {}) {
       if (order.payment_status === 'PAID') {
         await conn.query("UPDATE orders SET payment_status = 'REFUNDED' WHERE id = ?", [orderId]);
         await conn.query("UPDATE payments SET status = 'REFUNDED' WHERE order_id = ?", [orderId]);
+      }
+      // Đơn đã hủy/hoàn trả thì mã giảm giá được trả lại lượt dùng (trước đây lượt bị mất vĩnh viễn)
+      const [freed] = await conn.query('DELETE FROM coupon_usages WHERE order_id = ?', [orderId]);
+      if (freed.affectedRows && order.coupon_id) {
+        await conn.query('UPDATE coupons SET used_count = GREATEST(used_count - ?, 0) WHERE id = ?', [freed.affectedRows, order.coupon_id]);
       }
     }
     if (newStatus === 'CONFIRMED') await conn.query('UPDATE orders SET confirmed_by = ? WHERE id = ?', [userId, orderId]);

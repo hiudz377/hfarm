@@ -62,7 +62,7 @@ function OrdersScreen() {
   } else if (!items.length) {
     body =
       filter.key === 'all' ? (
-        <EmptyState icon="receipt-outline" title="Chưa có đơn hàng nào" message="Các đơn bạn đặt sẽ hiện ở đây." actionLabel="Đi mua sắm" onAction={() => router.navigate('/')} />
+        <EmptyState icon="receipt-outline" title="Chưa có đơn hàng nào" message="Các đơn bạn đặt sẽ hiện ở đây." actionLabel="Đi mua sắm" onAction={() => router.navigate('/shop')} />
       ) : (
         <EmptyState icon="receipt-outline" title={`Không có đơn "${filter.label}"`} message="Thử chọn bộ lọc khác." actionLabel="Xem tất cả đơn" onAction={() => setFilterKey('all')} />
       );

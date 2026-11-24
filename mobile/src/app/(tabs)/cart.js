@@ -120,7 +120,7 @@ function CartScreen() {
         title="Giỏ hàng trống"
         message="Hãy chọn vài món bạn thích nhé."
         actionLabel="Đi mua sắm"
-        onAction={() => router.navigate('/')}
+        onAction={() => router.navigate('/shop')}
       />
     );
   }
@@ -232,7 +232,7 @@ function CartScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { padding: space.lg, paddingBottom: space.xl },
-  banner: { backgroundColor: '#FDECEA', borderRadius: radius.md, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.danger },
+  banner: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md, marginBottom: space.md, borderWidth: 1, borderColor: colors.danger },
   bannerText: { color: colors.danger, fontSize: 13, lineHeight: 18 },
   footerWrap: { gap: space.md, marginTop: space.lg },
   box: { padding: space.md, gap: space.sm },

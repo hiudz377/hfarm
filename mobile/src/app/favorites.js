@@ -51,7 +51,7 @@ export default function Favorites() {
         title="Chưa có sản phẩm yêu thích"
         message="Chạm vào biểu tượng trái tim trên sản phẩm để lưu lại xem sau."
         actionLabel="Đi mua sắm"
-        onAction={() => goToTab(router, '/')}
+        onAction={() => goToTab(router, '/shop')}
       />
     );
   }

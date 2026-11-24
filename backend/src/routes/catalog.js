@@ -10,8 +10,14 @@ const { groupSizes } = require('../services/sizes');
 // Mobile dùng cho bảng lọc để không hiện size/màu/thương hiệu mà chọn xong chỉ ra kết quả trống.
 const inUse = (req) => req.query.in_use === '1' || req.query.in_use === 'true';
 
+// Mỗi danh mục kèm thumbnail: ảnh chính của sản phẩm đang bán mới nhất trong danh mục (null nếu chưa có), app dùng cho ô danh mục ở trang chủ
 router.get('/categories', wrap(async (req, res) => {
-  const [rows] = await db.query('SELECT * FROM categories WHERE is_active = 1 ORDER BY id');
+  const [rows] = await db.query(
+    `SELECT c.*,
+            (SELECT pi.image_url FROM product_images pi JOIN products p ON p.id = pi.product_id
+             WHERE p.category_id = c.id AND p.status = 'ACTIVE'
+             ORDER BY p.id DESC, pi.is_primary DESC, pi.sort_order, pi.id LIMIT 1) AS thumbnail
+     FROM categories c WHERE c.is_active = 1 ORDER BY c.id`);
   res.json(rows);
 }));
 router.get('/brands', wrap(async (req, res) => {
@@ -44,8 +50,17 @@ router.get('/colors', wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// Banner trang chủ app: chỉ banner đang bật và trong thời gian hiển thị. Rỗng thì app hiện banner mặc định.
+router.get('/banners', wrap(async (req, res) => {
+  const [rows] = await db.query(
+    `SELECT id, title, subtitle, image_url, link_type, link_value FROM banners
+     WHERE is_active = 1 AND (starts_at IS NULL OR starts_at <= NOW()) AND (ends_at IS NULL OR ends_at >= NOW())
+     ORDER BY sort_order, id LIMIT 10`);
+  res.json(rows);
+}));
+
 // ?q=áo&category_id=1&brand_id=1,2&size_id=2,3&color_id=1&min_price=100000&max_price=500000&in_stock=1
-// &sort=newest|price_asc|price_desc|bestseller&page=1&limit=10
+// &on_sale=1&sort=newest|price_asc|price_desc|bestseller&page=1&limit=10
 router.get('/products', wrap(async (req, res) => res.json(await listProducts(req.query, true))));
 // Gợi ý khi gõ ô tìm kiếm: ?q=ao&limit=8 -> [{ id, name, price, thumbnail }] (phải khai báo trước /products/:id)
 router.get('/products/suggest', wrap(async (req, res) => {

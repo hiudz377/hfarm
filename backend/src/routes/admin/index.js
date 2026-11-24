@@ -26,8 +26,13 @@ router.get('/me', wrap(async (req, res) => {
 router.use('/users', adminOnly);
 router.use('/coupons', adminOnly);
 router.use(['/categories', '/brands', '/sizes', '/colors'], writeAdminOnly);
+// Phí vận chuyển: staff chỉ xem. Banner: chỉ admin. Giao dịch ngân hàng: staff xem và đánh dấu đã xử lý.
+router.use('/shipping-zones', writeAdminOnly);
+router.use('/banners', adminOnly);
 
 router.use(require('./attributes'));
+router.use(require('./shipping'));
+router.use('/banners', require('./banners'));
 router.use(require('./upload'));
 router.use('/products', require('./products'));
 router.use('/inventory', require('./inventory'));

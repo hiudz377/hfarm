@@ -4,6 +4,8 @@ const path = require('path');
 require('dotenv').config();
 
 const { authenticate, requireRole, assertAuthConfig } = require('./src/middleware/auth');
+const { missingMigrations } = require('./src/migrations');
+const { expireUnpaidTransfers } = require('./src/services/payments');
 
 try {
   assertAuthConfig();
@@ -37,6 +39,10 @@ app.get('/', (req, res) => res.json({ message: 'Server HFarm đang chạy!' }));
 app.use('/api', require('./src/routes/catalog'));
 // Công khai: đăng ký tài khoản khách trong app (có giới hạn tần suất)
 app.use('/api/auth', require('./src/routes/auth'));
+// Công khai: phương thức thanh toán đang bật + webhook ngân hàng (webhook tự kiểm tra khóa PAYMENT_WEBHOOK_KEY)
+app.use('/api/payments', require('./src/routes/payments'));
+// Công khai: ước tính phí giao hàng + tra cứu hành trình theo mã vận đơn
+app.use('/api', require('./src/routes/shipping'));
 // Cần đăng nhập (khách hàng)
 app.use('/api/me', require('./src/routes/me'));
 app.use('/api/cart', require('./src/routes/cart'));
@@ -61,4 +67,21 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server chạy tại http://localhost:${PORT}`));
+
+async function start() {
+  const missing = await missingMigrations();
+  if (missing && missing.length) {
+    console.error(`Database chưa áp dụng migration: ${missing.join(', ')}.\n`
+      + 'Chạy lần lượt các file trong thư mục database/migrations/ (xem docs/RUNBOOK.md, mục Migration) rồi khởi động lại.');
+    process.exit(1);
+  }
+  app.listen(PORT, () => console.log(`Server chạy tại http://localhost:${PORT}`));
+
+  // Mỗi phút hủy các đơn chuyển khoản quá hạn chưa trả (hoàn kho). Đặt PAYMENT_EXPIRE_JOB=false để tắt.
+  if (process.env.PAYMENT_EXPIRE_JOB !== 'false') {
+    const tick = () => expireUnpaidTransfers().then((n) => { if (n) console.log(`Đã hủy ${n} đơn quá hạn thanh toán`); }).catch((e) => console.error('Lỗi tác vụ hủy đơn quá hạn:', e));
+    tick();
+    setInterval(tick, 60 * 1000).unref();
+  }
+}
+start();
