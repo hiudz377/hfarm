@@ -16,17 +16,6 @@ export const ORDER_STATUS = {
   RETURNED: { text: 'Hoàn trả', color: 'volcano' },
 };
 
-// Phải khớp với TRANSITIONS ở backend (src/services/orders.js)
-export const NEXT_STATUS = {
-  PENDING: ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED: ['PROCESSING', 'CANCELLED'],
-  PROCESSING: ['SHIPPING', 'CANCELLED'],
-  SHIPPING: ['COMPLETED', 'RETURNED'],
-  COMPLETED: ['RETURNED'],
-  CANCELLED: [],
-  RETURNED: [],
-};
-
 // Trang Đơn hàng gom 7 trạng thái thành 5 nhóm công việc để lọc nhanh (CONFIRMED + PROCESSING = "Đang chuẩn bị")
 export const ORDER_GROUPS = [
   { key: 'PENDING', label: 'Chờ xác nhận', statuses: ['PENDING'], color: 'gold' },

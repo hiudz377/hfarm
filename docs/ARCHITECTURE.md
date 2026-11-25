@@ -66,7 +66,7 @@ Chế độ dev (`AUTH_ENABLED=false`, mặc định): không có Keycloak trong
 │       ├── layouts/AdminLayout.jsx   menu, breadcrumb, chuông "Cần xử lý"
 │       ├── pages/               Dashboard, Products (+ProductDrawer), Orders, Reviews, Customers, Coupons, Inventory, Attributes (Size & Màu), CrudPage (Danh mục/Thương hiệu), Shipping (vùng ship), BankTransactions, Banners
 │       ├── components/          ConfirmButton, PageHeader, PersonCell
-│       └── utils.js             money, trạng thái đơn (NEXT_STATUS phải khớp TRANSITIONS ở backend), validate
+│       └── utils.js             money, nhãn + nhóm trạng thái đơn, thao tác xử lý đơn (phải khớp `BULK_ACTIONS` ở backend), validate
 └── mobile/                      App khách hàng: Expo SDK 58, React Native 0.88, Expo Router, React Query
     ├── app.json                 scheme "hfarm" (redirect URI hfarm://...), plugin expo-secure-store...
     ├── AGENTS.md                hướng dẫn cho Expo + ghi chú dự án thật (JavaScript, chưa có lint/tsc)
@@ -177,7 +177,7 @@ Role lấy từ `realm_access.roles` của token đã xác minh (không bao gi�
 - **Hoàn lại lượt dùng mã giảm giá** (sửa 2026-11-24, trước đó lượt bị mất vĩnh viễn): xóa dòng `coupon_usages` của đơn và `coupons.used_count - 1` (không âm). Cần vì tự hủy đơn quá hạn sẽ làm mất lượt mã hàng loạt.
 - Tùy chọn `requireUnpaid` (chỉ tác vụ tự hủy dùng): sau khi khóa dòng đơn mà `payment_status` không còn `UNPAID` (tiền vừa về) thì từ chối 409, không hủy đơn đã trả.
 
-### Bảng trạng thái đơn (đối chiếu `TRANSITIONS` trong `orders.js`, web `NEXT_STATUS` trong `web/src/utils.js` khớp)
+### Bảng trạng thái đơn (nguồn duy nhất: `TRANSITIONS` trong `backend/src/services/orders.js`; web chỉ giữ nhãn/nhóm và các thao tác trong `web/src/utils.js`)
 
 | Từ \ Sang | CONFIRMED | PROCESSING | SHIPPING | COMPLETED | CANCELLED | RETURNED |
 |---|---|---|---|---|---|---|

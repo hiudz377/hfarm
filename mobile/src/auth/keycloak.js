@@ -79,8 +79,6 @@ export function subscribe(fn) {
   return () => listeners.delete(fn);
 }
 
-export const isSignedIn = () => !!session;
-
 // Đọc claim của JWT (không kiểm tra chữ ký: chỉ để lấy sub/exp; backend mới là nơi xác thực token)
 function claimsOf(jwt) {
   try {
