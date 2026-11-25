@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { fetchAuthConfig, registerAccount } from '@/api/auth';
 import { useAuth } from '@/auth/AuthProvider';
 import { authErrorMessage } from '@/auth/keycloak';
+import BrandLogo from '@/components/BrandLogo';
 import Button from '@/components/Button';
 import Field from '@/components/Field';
 import KeyboardView from '@/components/KeyboardView';
@@ -18,6 +20,7 @@ import { colors, radius, space } from '@/utils/theme';
 // hoặc client chưa bật đăng nhập bằng mật khẩu, mới có nút dự phòng mở trang Keycloak.
 export default function LoginForm({ initialMode = 'in', dismissLabel, onDismiss }) {
   const { signInWithPassword, signIn, signUp, sessionExpired } = useAuth();
+  const router = useRouter();
   const mounted = useMounted();
   const config = useQuery({ queryKey: ['auth-config'], queryFn: fetchAuthConfig, staleTime: 5 * 60 * 1000 });
   const canRegister = config.data?.registration === true;
@@ -231,10 +234,7 @@ export default function LoginForm({ initialMode = 'in', dismissLabel, onDismiss 
     <KeyboardView>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.box}>
-          <View style={styles.logo}>
-            <Ionicons name="leaf" size={36} color={colors.white} />
-          </View>
-          <Text style={styles.brand}>HFarm</Text>
+          <BrandLogo variant="compact" width={150} style={styles.logo} />
 
           <View style={styles.tabs} role="tablist">
             {[['in', 'Đăng nhập'], ['up', 'Đăng ký']].map(([key, label]) => (
@@ -248,6 +248,15 @@ export default function LoginForm({ initialMode = 'in', dismissLabel, onDismiss 
           {formError ? <Text style={styles.error} role="alert">{formError}</Text> : null}
 
           {body}
+
+          {mode === 'up' ? (
+            <Text style={styles.legal}>
+              Bằng việc tạo tài khoản, bạn đồng ý với{' '}
+              <Text style={styles.legalLink} role="link" onPress={() => router.push('/policy/terms')}>Điều khoản sử dụng</Text>
+              {' '}và{' '}
+              <Text style={styles.legalLink} role="link" onPress={() => router.push('/policy/privacy')}>Chính sách bảo mật</Text>.
+            </Text>
+          ) : null}
 
           {browserFallback ? (
             <Button
@@ -272,8 +281,7 @@ export default function LoginForm({ initialMode = 'in', dismissLabel, onDismiss 
 const styles = StyleSheet.create({
   scroll: { flexGrow: 1, justifyContent: 'center', padding: space.xl },
   box: { alignSelf: 'center', width: '100%', maxWidth: 380, gap: space.md },
-  logo: { alignSelf: 'center', width: 68, height: 68, borderRadius: 34, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  brand: { alignSelf: 'center', fontSize: 26, fontWeight: '800', color: colors.primaryDark, marginBottom: space.xs },
+  logo: { alignSelf: 'center', marginBottom: space.xs },
   tabs: { flexDirection: 'row', backgroundColor: colors.border, borderRadius: radius.md, padding: 3 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: radius.md - 2 },
   tabOn: { backgroundColor: colors.surface },
@@ -288,6 +296,8 @@ const styles = StyleSheet.create({
   expired: { fontSize: 13, color: colors.primaryDark, backgroundColor: colors.primarySoft, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, textAlign: 'center', overflow: 'hidden' },
   error: { fontSize: 13, color: colors.danger, backgroundColor: colors.dangerSoft, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, lineHeight: 18, overflow: 'hidden' },
   fallback: { marginTop: space.xs },
+  legal: { fontSize: 12, color: colors.muted, textAlign: 'center', lineHeight: 18 },
+  legalLink: { color: colors.primary, textDecorationLine: 'underline' },
   dismiss: { alignSelf: 'center', marginTop: space.sm },
   dismissText: { fontSize: 14, color: colors.muted, textDecorationLine: 'underline' },
 });

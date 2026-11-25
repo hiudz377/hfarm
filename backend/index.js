@@ -43,6 +43,8 @@ app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/payments', require('./src/routes/payments'));
 // Công khai: ước tính phí giao hàng + tra cứu hành trình theo mã vận đơn
 app.use('/api', require('./src/routes/shipping'));
+// Công khai: thông tin liên hệ + số ngày đổi trả của cửa hàng (biến STORE_*, RETURN_DAYS)
+app.use('/api/store', require('./src/routes/store'));
 // Cần đăng nhập (khách hàng)
 app.use('/api/me', require('./src/routes/me'));
 app.use('/api/cart', require('./src/routes/cart'));

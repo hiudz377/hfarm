@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchBanners, fetchCategories } from '@/api/products';
 import { fetchPaymentMethods } from '@/api/payments';
 import { fetchShippingEstimate } from '@/api/shipping';
+import BrandLogo from '@/components/BrandLogo';
 import Button from '@/components/Button';
 import CategoryTiles from '@/components/CategoryTiles';
 import HeroCarousel from '@/components/HeroCarousel';
@@ -66,8 +67,11 @@ export default function Home() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
     >
       <View style={styles.top}>
-        <Text style={styles.brand}>HFarm</Text>
-        <Text style={styles.brandSub}>Thời trang</Text>
+        <BrandLogo variant="mark" width={54} />
+        <View style={styles.brandText}>
+          <BrandLogo variant="wordmark" width={100} />
+          <Text style={styles.brandSub}>Thời trang</Text>
+        </View>
       </View>
 
       <Pressable onPress={() => goShop({ focus: '1' })} style={styles.search} role="button" aria-label="Tìm sản phẩm">
@@ -122,9 +126,9 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { gap: space.xl, paddingBottom: space.xxl },
   pad: { paddingHorizontal: space.lg },
-  top: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingHorizontal: space.lg },
-  brand: { fontSize: 28, fontWeight: '900', color: colors.primary, letterSpacing: -0.8 },
-  brandSub: { fontSize: 12, fontWeight: '700', color: colors.muted, letterSpacing: 2, textTransform: 'uppercase' },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: space.lg },
+  brandText: { gap: 2 },
+  brandSub: { fontSize: 10, fontWeight: '700', color: colors.primary, letterSpacing: 3.2, textTransform: 'uppercase', paddingLeft: 4 },
   search: {
     flexDirection: 'row', alignItems: 'center', gap: 10, height: 46, marginHorizontal: space.lg, marginTop: -space.sm,
     paddingHorizontal: space.lg, borderRadius: radius.pill, backgroundColor: colors.surface,

@@ -134,7 +134,7 @@ docker compose up -d --build
   `docker compose exec -T db mysql -uroot -p<mật-khẩu-DB_PASSWORD> clothing_store < clothing_store.sql`.
 
 ## Các nhóm API
-- Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors, /api/banners, /api/payments/methods, /api/shipping/estimate, /api/tracking/:mã-vận-đơn
+- Công khai:  GET /api/products, /api/products/:id, /api/categories, /api/brands, /api/sizes, /api/colors, /api/banners, /api/payments/methods, /api/shipping/estimate, /api/tracking/:mã-vận-đơn, /api/store (thông tin liên hệ + số ngày đổi trả, đọc từ `STORE_*` và `RETURN_DAYS` trong `backend/.env`)
   - Từ 2026-11-24: `GET /api/products?on_sale=1` (chỉ sản phẩm đang giảm giá); `GET /api/categories` kèm `thumbnail`; `GET /api/banners` (banner trang chủ app); `GET /api/payments/methods` (COD, và chuyển khoản nếu đã cấu hình `BANK_*`); `GET /api/shipping/estimate?province=&subtotal=` (phí + số ngày giao theo vùng); `GET /api/tracking/:code` (tra cứu hành trình, tên người nhận được che, không lộ SĐT/địa chỉ). Chi tiết: `docs/API.md`.
   - `GET /api/products` lọc + sắp xếp + phân trang. Tham số (đều tùy chọn): `q` (tìm theo tên), `category_id`,
     `brand_id` / `size_id` / `color_id` (một hoặc nhiều id cách nhau dấu phẩy, ví dụ `size_id=2,3`),

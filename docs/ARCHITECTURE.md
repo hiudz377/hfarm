@@ -139,7 +139,7 @@ Role lấy từ `realm_access.roles` của token đã xác minh (không bao gi�
 | Phạm vi | Endpoint / trang | Chưa đăng nhập | customer | staff | admin |
 |---|---|---|---|---|---|
 | Danh mục công khai | `GET /api/categories, brands, sizes, colors, products*, banners` | ✓ | ✓ | ✓ | ✓ |
-| Thanh toán + giao hàng công khai | `GET /api/payments/methods`, `GET /api/shipping/estimate`, `GET /api/tracking/:code` (giới hạn 30/phút/IP) | ✓ | ✓ | ✓ | ✓ |
+| Thanh toán + giao hàng + thông tin cửa hàng công khai | `GET /api/payments/methods`, `GET /api/shipping/estimate`, `GET /api/tracking/:code` (giới hạn 30/phút/IP), `GET /api/store` (liên hệ + số ngày đổi trả, chỉ đọc `.env`) | ✓ | ✓ | ✓ | ✓ |
 | Webhook ngân hàng | `POST /api/payments/webhook/sepay` (không dùng token người dùng: kiểm tra `PAYMENT_WEBHOOK_KEY`, tắt hẳn nếu chưa đặt) | khóa webhook | khóa webhook | khóa webhook | khóa webhook |
 | Đăng ký | `GET /api/auth/config`, `POST /api/auth/register` | ✓ | ✓ | ✓ | ✓ |
 | Dữ liệu của chính mình | `/api/me*`, `/api/cart*`, `/api/orders*` (gồm `/:id/payment`, `/:id/tracking`), `/api/favorites*`, `POST /api/reviews` | 401 | ✓ | ✓ | ✓ |
@@ -282,6 +282,8 @@ Quy ước: giá trị mẫu là GIẢ. File `.env` thật bị `.gitignore` (`.
 | `PAYMENT_WEBHOOK_KEY` | Khóa webhook ngân hàng (SePay gửi `Authorization: Apikey <khóa>`). Trống = tắt webhook, nhân viên xác nhận tay | `<chuoi-ngau-nhien-dai>` | Không |
 | `PAYMENT_HOLD_MINUTES` | Số phút giữ đơn chuyển khoản chưa trả (5 - 10080) | `1440` | Không (mặc định 24 giờ) |
 | `PAYMENT_EXPIRE_JOB` | `false` = tắt tác vụ tự hủy đơn quá hạn | `true` | Không |
+| `STORE_NAME`, `STORE_PHONE`, `STORE_ZALO`, `STORE_EMAIL`, `STORE_ADDRESS`, `STORE_HOURS` | Thông tin cửa hàng hiện trong app (màn Liên hệ, nút Gọi/Zalo/Email ở chi tiết đơn) qua `GET /api/store`. Trống hoặc sai định dạng thì app ẩn mục/nút tương ứng. Đọc mỗi lần gọi (đổi `.env` + restart backend là đủ, không phải build lại app). Không ghi số thật vào code/docs: kho GitHub là công khai | `0900000000`, `cskh@example.com` (mẫu GIẢ) | Không (nhưng không có thì app không có cách liên hệ) |
+| `RETURN_DAYS` | Số ngày khách được yêu cầu đổi trả kể từ khi nhận hàng, hiện trong Chính sách đổi trả và lời nhắn ở đơn hàng (1 - 90) | `7` | Không (mặc định 7) |
 | `CORS_ORIGIN` | Origin được gọi API, cách nhau dấu phẩy | `http://localhost:5173` | Không (trống: bật xác thực -> chỉ `http://localhost:5173`; dev -> mọi origin) |
 | `PUBLIC_URL` | Origin công khai của backend, dùng làm URL ảnh tải lên (`/uploads/...`) | `http://localhost:3000` | Không (mặc định như mẫu). Chỉ cần đặt khi ảnh upload không hiện trên điện thoại; có dòng comment trong `backend/.env.example` |
 | `ENV_FILE`, `KC_ADMIN_USER`, `KC_ADMIN_PASSWORD`, `KEYCLOAK_MOBILE_CLIENT_ID` | Chỉ dành cho `scripts/setup-keycloak.js` (file .env khác; tài khoản quản trị Keycloak = `admin` ở realm master; tên client mobile, mặc định `hfarm-mobile`) | `<...>` | Không |
@@ -315,6 +317,7 @@ Quy ước: giá trị mẫu là GIẢ. File `.env` thật bị `.gitignore` (`.
 | `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_ISSUERS`, `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET`, `CORS_ORIGIN` | Chuyển thẳng vào backend (trong container, Keycloak trên máy là `http://host.docker.internal:8080`) | như mục 6.1 | Khi bật Keycloak |
 | `VITE_KEYCLOAK_URL`, `VITE_KEYCLOAK_REALM`, `VITE_KEYCLOAK_CLIENT_ID` | Truyền làm build arg cho web | như mục 6.2 | Khi bật Keycloak |
 | `DEFAULT_CARRIER` | Đơn vị vận chuyển mặc định | `HFarm Express` | Không |
+| `STORE_NAME`, `STORE_PHONE`, `STORE_ZALO`, `STORE_EMAIL`, `STORE_ADDRESS`, `STORE_HOURS`, `RETURN_DAYS` | Thông tin cửa hàng hiện trong app (chuyển thẳng vào backend; trống = app ẩn mục liên hệ) | như mục 6.1 | Không |
 | `BANK_BIN`, `BANK_NAME`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME`, `PAYMENT_WEBHOOK_KEY`, `PAYMENT_HOLD_MINUTES` | Thanh toán chuyển khoản VietQR + webhook (chuyển thẳng vào backend; trống = tắt chuyển khoản) | như mục 6.1 | Không |
 
 MySQL trong Compose nạp `schema.sql` rồi các migration (`02-`, `03-` trong `docker-entrypoint-initdb.d`) CHỈ ở lần tạo volume đầu; volume đã có dữ liệu thì áp dụng migration tay (RUNBOOK). `MYSQL_DATABASE=clothing_store` để migration (không có lệnh `USE`) chạy đúng database.

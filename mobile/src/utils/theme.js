@@ -4,6 +4,7 @@ export const colors = {
   primaryDark: '#14432A',
   primarySoft: '#E8F0EA',
   bg: '#F7F6F2',
+  splash: '#F5F5EE', // nền kem của logo; trùng "backgroundColor" của expo-splash-screen trong app.json
   surface: '#FFFFFF',
   text: '#17201A',
   muted: '#6C756E',

@@ -205,6 +205,14 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - Sửa khi kiểm tra: nhãn thanh tab trên web bị cắt nửa chữ (nhãn bị co còn 7px do `flex-shrink`), sửa bằng `tabBarLabelStyle.flexShrink: 0`; test cũ báo đạt nhầm vì đo nhầm phần tử, đã siết lại.
 - Kiểm tra: xem `docs/STATUS.md` mục 2.1 (backend 125 bước, CMS 26 bước, app web 58 bước, đều trên database tạm). **Chưa kiểm tra**: điện thoại thật, quét QR bằng app ngân hàng thật, webhook SePay thật, in tem ra giấy.
 
+### 4.14 Liên hệ, chính sách, hướng dẫn chọn size, hỗ trợ đổi trả (2026-11-25)
+Làm theo đánh giá "app còn thiếu gì để dùng thật" (chưa cần tên miền/máy chủ).
+- [x] Backend: `GET /api/store` (công khai, chỉ đọc `STORE_*` + `RETURN_DAYS` trong `.env`, giá trị sai định dạng thành `null`); biến mẫu giả trong `.env.example` (backend + gốc) và truyền trong `docker-compose.yml`.
+- [x] App: màn `contact`, `policy/[slug]` (đổi trả / bảo mật / điều khoản), `size-guide` (modal, gợi ý size theo chiều cao + cân nặng); `ContactActions` (Gọi / Zalo / Email); mục Hỗ trợ + phiên bản ở Tài khoản; "Liên hệ & chính sách" ở lời mời đăng nhập; dòng đồng ý điều khoản ở tab Đăng ký; khối "Cần hỗ trợ?" ở chi tiết đơn (lời nhắn theo trạng thái, email có sẵn mã đơn); liên kết "Hướng dẫn chọn size" cạnh nhãn Size ở trang sản phẩm.
+- [x] Nội dung ở `src/content/` (`policies.js`, `sizeGuide.js`) là **bản nháp mẫu** cần chủ cửa hàng rà soát (số đo tham khảo, không phải số đo thật; không phải tư vấn pháp lý).
+- Sửa khi kiểm tra: `getPolicy('constructor')` (mở `/policy/constructor`) làm sập màn vì tra cứu thẳng vào object; nay chỉ nhận slug trong `POLICY_SLUGS`. Chữ "1–2 cm" bị ngắt dòng giữa chừng nên đổi thành "1 đến 2 cm".
+- Bẫy khi test web: RNW mở `tel:` bằng `window.location = ...` (không chặn được bằng `window.open`); test bọc `URL` để bắt. Kiểm tra: `docs/STATUS.md` mục 2.1. **Chưa kiểm tra**: điện thoại thật (mở app gọi/Zalo/thư, bàn phím số), trang đăng nhập dạng modal mở chính sách trên native.
+
 ## Giả định và việc cần quyết định sau
 
 - Dữ liệu: repo không có dữ liệu mẫu sản phẩm, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.

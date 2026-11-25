@@ -10,6 +10,7 @@ import { cancelOrder, fetchOrder, fetchTracking } from '@/api/orders';
 import PaymentQR from '@/components/PaymentQR';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
+import ContactActions from '@/components/ContactActions';
 import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import PriceSummary from '@/components/PriceSummary';
@@ -22,6 +23,7 @@ import { paymentLabel } from '@/utils/payment';
 import { orderKey, paymentKey, trackingKey } from '@/utils/queryKeys';
 import { afterOrderCancelled } from '@/utils/useCart';
 import { useFocusRefresh, usePullRefresh } from '@/utils/useRefresh';
+import { useStore } from '@/utils/useStore';
 import { colors, radius, space } from '@/utils/theme';
 
 function Section({ title, children }) {
@@ -76,6 +78,7 @@ export default function OrderDetail() {
 
   const q = useQuery({ queryKey: orderKey(id), queryFn: () => fetchOrder(id), staleTime: 0 }); // trạng thái đơn đổi ở CMS: luôn tải lại khi mở
   const order = q.data;
+  const { store } = useStore(); // số ngày đổi trả (ContactActions tự lấy thông tin liên hệ từ cùng truy vấn)
   // Hành trình giao hàng (gộp mốc đổi trạng thái + mốc nhân viên ghi + mốc đã nhận tiền). Lỗi thì dùng lịch sử đơn.
   const tracking = useQuery({ queryKey: trackingKey(id), queryFn: () => fetchTracking(id), staleTime: 0 });
   useFocusRefresh(orderKey(id)); // CMS có thể đã đổi trạng thái
@@ -136,6 +139,14 @@ export default function OrderDetail() {
   const ship = order.shipment;
   const canCancel = order.status === 'PENDING';
   const needTransfer = method === 'BANK_TRANSFER' && order.payment_status === 'UNPAID' && !['CANCELLED', 'RETURNED'].includes(order.status);
+  // Lời nhắn ở mục "Cần hỗ trợ?" theo trạng thái: đơn đã nhận thì nói về đổi trả; đơn chưa nhận thì nói về đổi thông tin / hủy
+  const helpText = order.status === 'COMPLETED'
+    ? `Muốn đổi size hoặc trả hàng? Hãy liên hệ cửa hàng trong ${store.return_days} ngày kể từ khi nhận hàng, kèm mã đơn ${order.order_code}.`
+    : ['CANCELLED', 'RETURNED'].includes(order.status)
+      ? `Cần hỏi thêm về đơn ${order.order_code}? Liên hệ cửa hàng, kèm mã đơn.`
+      : canCancel
+        ? `Cần đổi địa chỉ nhận hàng hoặc hỏi về đơn ${order.order_code}? Liên hệ cửa hàng, kèm mã đơn.`
+        : `Đơn đã được cửa hàng xác nhận nên không tự hủy trong ứng dụng được. Cần đổi thông tin nhận hàng hoặc hủy đơn ${order.order_code}? Hãy liên hệ cửa hàng càng sớm càng tốt.`;
 
   return (
     <View style={styles.screen}>
@@ -224,6 +235,15 @@ export default function OrderDetail() {
           />
         </Section>
 
+        <Section title="Cần hỗ trợ?">
+          <Text style={styles.muted}>{helpText}</Text>
+          <ContactActions orderCode={order.order_code} />
+          <Pressable onPress={() => router.push('/policy/returns')} hitSlop={8} style={styles.policyLink} role="link">
+            <Ionicons name="swap-horizontal-outline" size={16} color={colors.primary} />
+            <Text style={styles.policyText}>Xem chính sách đổi trả</Text>
+          </Pressable>
+        </Section>
+
       </ScrollView>
 
       {canCancel ? (
@@ -261,5 +281,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: colors.border, marginVertical: space.xs },
   shipBox: { gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.bg, marginBottom: space.sm },
   codeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  policyLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
+  policyText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   footer: { paddingHorizontal: space.lg, paddingTop: space.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
 });

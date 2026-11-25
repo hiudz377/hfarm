@@ -65,6 +65,14 @@ services:
       BANK_ACCOUNT_NAME: ${BANK_ACCOUNT_NAME:-}
       PAYMENT_WEBHOOK_KEY: ${PAYMENT_WEBHOOK_KEY:-}
       PAYMENT_HOLD_MINUTES: ${PAYMENT_HOLD_MINUTES:-1440}
+      # Thông tin cửa hàng hiển thị trong app (để trống = app ẩn mục tương ứng). Xem backend/.env.example
+      STORE_NAME: ${STORE_NAME:-HFarm}
+      STORE_PHONE: ${STORE_PHONE:-}
+      STORE_ZALO: ${STORE_ZALO:-}
+      STORE_EMAIL: ${STORE_EMAIL:-}
+      STORE_ADDRESS: ${STORE_ADDRESS:-}
+      STORE_HOURS: ${STORE_HOURS:-}
+      RETURN_DAYS: ${RETURN_DAYS:-7}
     volumes:
       - hfarm-uploads:/app/uploads
     ports:

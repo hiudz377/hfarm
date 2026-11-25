@@ -101,10 +101,11 @@
 
 #kc-header-wrapper::before {
   content: "";
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  background: url("../img/logo.svg") center / contain no-repeat;
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  /* logo.png đã là ô nền kem bo góc chứa biểu tượng HF (tách từ logo thiết kế) */
+  background: url("../img/logo.png") center / contain no-repeat;
   box-shadow: 0 8px 20px rgba(10, 40, 24, 0.35);
 }
 

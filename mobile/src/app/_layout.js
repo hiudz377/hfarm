@@ -1,10 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
-import Loading from '@/components/Loading';
+import BrandSplash from '@/components/BrandSplash';
 import { colors, screenHeader } from '@/utils/theme';
+
+// Màn hình chờ có logo hiện ít nhất chừng này ms từ lúc mở app (khôi phục phiên thường xong trong vài chục ms nên nếu
+// không giữ lại thì logo chỉ nháy lên rồi mất). Phiên lâu hơn thì chờ đến khi xong, không cộng thêm.
+const SPLASH_MIN_MS = 1200;
 
 // retry: false -> lỗi hiện ngay kèm nút "Thử lại" thay vì quay vòng lâu khi sai địa chỉ API
 const queryClient = new QueryClient({
@@ -15,14 +19,19 @@ function Routes() {
   const router = useRouter();
   const { status, sessionExpired } = useAuth();
   const signedIn = status === 'authenticated';
+  const [splashDone, setSplashDone] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSplashDone(true), SPLASH_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Phiên hết hạn giữa chừng (backend từ chối token, refresh token hết hạn): đưa về màn đăng nhập
   useEffect(() => {
     if (sessionExpired) router.push('/login');
   }, [sessionExpired, router]);
 
-  // Đang khôi phục phiên đã lưu từ lần mở trước
-  if (status === 'loading') return <Loading />;
+  // Đang khôi phục phiên đã lưu từ lần mở trước (hoặc chưa đủ thời gian hiện logo)
+  if (status === 'loading' || !splashDone) return <BrandSplash />;
 
   return (
     // headerTransparent: false - từ iOS 26 header mặc định trong suốt và nội dung trượt xuống dưới header
@@ -31,6 +40,10 @@ function Routes() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="product/[id]" options={{ title: 'Chi tiết sản phẩm' }} />
       <Stack.Screen name="login" options={{ title: 'Đăng nhập', presentation: 'modal' }} />
+      {/* Công khai: cửa hàng ứng dụng yêu cầu xem được chính sách và cách liên hệ khi chưa đăng nhập */}
+      <Stack.Screen name="contact" options={{ title: 'Liên hệ & hỗ trợ' }} />
+      <Stack.Screen name="policy/[slug]" options={{ title: 'Chính sách' }} />
+      <Stack.Screen name="size-guide" options={{ title: 'Hướng dẫn chọn size', presentation: 'modal' }} />
       {/* Các màn dưới đây cần đăng nhập: mở bằng liên kết khi chưa đăng nhập hoặc vừa đăng xuất thì bị đưa về màn đầu */}
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="order/[id]" options={{ title: 'Chi tiết đơn hàng' }} />

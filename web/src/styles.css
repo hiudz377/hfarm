@@ -25,17 +25,28 @@ body {
 
 .brand-lockup {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  height: 72px;
-  padding: 0 20px;
-  color: #fff;
+  gap: 8px;
+  padding: 14px 12px 6px;
   white-space: nowrap;
 }
 
-.brand-mark { flex: 0 0 auto; color: #a5d6a7; }
-.brand-name { color: #fff !important; font-size: 21px; letter-spacing: .2px; }
-.brand-subtitle { display: block; color: #bdd2c0 !important; font-size: 11px; }
+/* Nền kem của logo (#f5f5ee) để chữ xanh đậm đọc được trên thanh bên xanh */
+.brand-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 10px;
+  border-radius: 14px;
+  background: #f5f5ee;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+.brand-logo-full { display: block; width: 112px; height: auto; }
+.brand-logo-mini { display: none; width: 34px; height: auto; }
+.brand-subtitle { display: block; color: #bdd2c0 !important; font-size: 11px; letter-spacing: .1em; }
 
 .admin-menu { border-inline-end: 0 !important; background: transparent !important; }
 .admin-menu .ant-menu-item-group-title {
@@ -175,7 +186,6 @@ body {
 .stat-purple { color: #7b1fa2; background: #f3e5f5; }
 
 @media (max-width: 767px) {
-  .brand-lockup { padding-inline: 15px; }
   .admin-header { height: 58px; padding: 0 16px; }
   .header-user { max-width: 170px; padding-inline: 6px; }
   .admin-content { padding: 18px 14px; }
@@ -249,8 +259,11 @@ body {
 .bell-btn:hover, .bell-btn:focus-visible { background: #f1f6f1; }
 .bell-item { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-width: 250px; }
 .bell-item b { color: #1d3020; }
-.ant-layout-sider-collapsed .brand-copy { display: none; }
-.ant-layout-sider-collapsed .brand-lockup { justify-content: center; padding: 0; }
+.ant-layout-sider-collapsed .brand-subtitle { display: none; }
+.ant-layout-sider-collapsed .brand-lockup { padding: 14px 8px 6px; }
+.ant-layout-sider-collapsed .brand-card { padding: 9px 4px; border-radius: 12px; }
+.ant-layout-sider-collapsed .brand-logo-full { display: none; }
+.ant-layout-sider-collapsed .brand-logo-mini { display: block; }
 .drawer-footer { display: flex; justify-content: flex-end; gap: 10px; }
 .form-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 16px; }
 .form-grid-3 .span-3 { grid-column: 1 / -1; }

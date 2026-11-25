@@ -265,7 +265,19 @@ export default function ProductDetail() {
 
         {sizeOptions.length ? (
           <View style={styles.section}>
-            <Text style={styles.label}>Size</Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Size</Text>
+              <Pressable
+                onPress={() => router.push({ pathname: '/size-guide', params: { size: sizeOptions.find((s) => s.id === sizeId)?.name ?? '' } })}
+                hitSlop={8}
+                style={styles.guideLink}
+                role="link"
+                aria-label="Hướng dẫn chọn size"
+              >
+                <Ionicons name="resize-outline" size={16} color={colors.primary} />
+                <Text style={styles.guideText}>Hướng dẫn chọn size</Text>
+              </Pressable>
+            </View>
             <View style={styles.options}>
               {sizeOptions.map((s) => (
                 <Chip key={s.id} label={s.name} selected={sizeId === s.id} dimmed={!inStock(colorId, s.id)} onPress={() => setPickedSize(s.id)} />
@@ -380,6 +392,9 @@ const styles = StyleSheet.create({
   price: { fontSize: 24, fontWeight: '900', color: colors.text, letterSpacing: -0.4 },
   compare: { fontSize: 14, color: colors.muted, textDecorationLine: 'line-through' },
   label: { fontSize: 15, fontWeight: '600', color: colors.text },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  guideLink: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  guideText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   stock: { paddingHorizontal: space.lg, paddingTop: space.md, fontSize: 13, color: colors.muted },
   stockOut: { color: colors.danger },

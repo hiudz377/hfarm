@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/auth/AuthProvider';
+import BrandLogo from '@/components/BrandLogo';
 import Button from '@/components/Button';
 import { colors, radius, space } from '@/utils/theme';
 
@@ -14,10 +14,7 @@ export default function LoginPanel({ title = 'Chào mừng đến với HFarm', 
 
   return (
     <View style={styles.box}>
-      <View style={styles.logo}>
-        <Ionicons name="leaf" size={44} color={colors.white} />
-      </View>
-      <Text style={styles.brand}>HFarm</Text>
+      <BrandLogo variant="full" width={176} />
       <Text style={styles.title}>{title}</Text>
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -33,18 +30,23 @@ export default function LoginPanel({ title = 'Chào mừng đến với HFarm', 
           <Text style={styles.dismissText}>{dismissLabel || 'Để sau'}</Text>
         </Pressable>
       ) : null}
+
+      {/* Chưa đăng nhập vẫn xem được liên hệ + chính sách (cửa hàng ứng dụng yêu cầu) */}
+      <Pressable onPress={() => router.push('/contact')} hitSlop={8} style={styles.help} role="link">
+        <Text style={styles.helpText}>Liên hệ & chính sách</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   box: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.xl, gap: space.sm },
-  logo: { width: 84, height: 84, borderRadius: 42, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  brand: { fontSize: 28, fontWeight: '800', color: colors.primaryDark, marginTop: space.sm },
-  title: { fontSize: 18, fontWeight: '600', color: colors.text, textAlign: 'center', marginTop: space.xs },
+  title: { fontSize: 18, fontWeight: '600', color: colors.text, textAlign: 'center', marginTop: space.md },
   message: { fontSize: 14, color: colors.muted, textAlign: 'center', lineHeight: 20, maxWidth: 320 },
   expired: { fontSize: 13, color: colors.primaryDark, backgroundColor: colors.primarySoft, borderRadius: radius.md, paddingHorizontal: space.md, paddingVertical: space.sm, textAlign: 'center', overflow: 'hidden' },
   actions: { alignSelf: 'stretch', gap: space.md, marginTop: space.lg, maxWidth: 360, width: '100%' },
   dismiss: { marginTop: space.md },
   dismissText: { fontSize: 14, color: colors.muted, textDecorationLine: 'underline' },
+  help: { marginTop: space.lg },
+  helpText: { fontSize: 13, color: colors.muted },
 });

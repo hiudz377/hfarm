@@ -1,5 +1,6 @@
 import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { fetchMe } from '@/api/me';
@@ -91,7 +92,15 @@ function AccountScreen() {
         <MenuRow icon="receipt-outline" title="Đơn hàng của tôi" subtitle="Xem và theo dõi đơn" onPress={() => router.navigate('/orders')} last />
       </Card>
 
+      <Card clip>
+        <MenuRow icon="headset-outline" title="Liên hệ cửa hàng" subtitle="Gọi điện, Zalo, email" onPress={() => router.push('/contact')} />
+        <MenuRow icon="swap-horizontal-outline" title="Chính sách đổi trả" onPress={() => router.push('/policy/returns')} />
+        <MenuRow icon="shield-checkmark-outline" title="Chính sách bảo mật" onPress={() => router.push('/policy/privacy')} />
+        <MenuRow icon="document-text-outline" title="Điều khoản sử dụng" onPress={() => router.push('/policy/terms')} last />
+      </Card>
+
       <Button title="Đăng xuất" variant="danger" onPress={confirmSignOut} />
+      <Text style={styles.version}>HFarm {Constants.expoConfig?.version ? `· Phiên bản ${Constants.expoConfig.version}` : ''}</Text>
       {AUTH_MODE === 'dev' ? (
         <Text style={styles.devNote}>Chế độ dev: chưa có phiên đăng nhập thật nên "Đăng xuất" chỉ làm mới dữ liệu tạm trong app.</Text>
       ) : null}
@@ -108,5 +117,6 @@ const styles = StyleSheet.create({
   info: { flex: 1, gap: 2 },
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   sub: { fontSize: 13, color: colors.muted },
+  version: { fontSize: 12, color: colors.muted, textAlign: 'center' },
   devNote: { fontSize: 12, color: colors.muted, textAlign: 'center', lineHeight: 17 },
 });

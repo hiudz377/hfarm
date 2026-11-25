@@ -58,7 +58,7 @@ Container `keycloak-hfarm` (image `quay.io/keycloak/keycloak:26.8.1`, chạy `st
 
 ### Giao diện đăng nhập Keycloak (theme `hfarm`)
 
-Theme nằm ở `keycloak/themes/hfarm/login/`: kế thừa theme mặc định `keycloak.v2`, chỉ thêm CSS xanh rừng + nền kem (màu lấy từ `mobile/src/utils/theme.js`), logo lá (cùng biểu tượng với `web/public/favicon.svg`) và vài câu chữ; **không ghi đè file `.ftl` nào** nên nâng cấp Keycloak ít khi làm vỡ. Áp dụng cho trang đăng nhập, đăng ký, quên mật khẩu, đăng xuất, trang lỗi của mọi client (CMS và app mobile). Chưa làm theme email và account console.
+Theme nằm ở `keycloak/themes/hfarm/login/`: kế thừa theme mặc định `keycloak.v2`, chỉ thêm CSS xanh rừng + nền kem (màu lấy từ `mobile/src/utils/theme.js`), logo HFarm (ô nền kem chứa biểu tượng HF, cùng logo với `web/public/favicon.png`) và vài câu chữ; **không ghi đè file `.ftl` nào** nên nâng cấp Keycloak ít khi làm vỡ. Áp dụng cho trang đăng nhập, đăng ký, quên mật khẩu, đăng xuất, trang lỗi của mọi client (CMS và app mobile). Chưa làm theme email và account console.
 
 **Cài vào container** (1 lần, không cần dừng Keycloak, không đụng volume `hfarm_keycloak`). Ở thư mục gốc dự án:
 
@@ -75,7 +75,7 @@ Chạy lại đúng lệnh này sau mỗi lần sửa file trong theme (`start-d
 
 **Quay lại giao diện cũ**: Login theme = `keycloak.v2`. **Gỡ hẳn theme**: `docker exec keycloak-hfarm rm -rf /opt/keycloak/themes/hfarm` (sau khi realm đã chọn lại theme khác).
 
-**Sửa giao diện**: màu ở khối `:root` đầu `resources/css/hfarm.css`; câu chữ ở `messages/messages_vi.properties` (và `messages_en.properties`), chỉ ghi các câu muốn đổi, câu khác dùng bản có sẵn của Keycloak; ảnh ở `resources/img/` (`logo.svg`, `favicon.ico`). Muốn thử trước mà không đụng Keycloak thật: chạy một container Keycloak riêng (tên, cổng, không có volume), nạp realm từ file JSON có `"loginTheme": "hfarm"`, rồi `docker rm -f` khi xong (đây là cách đã dùng để kiểm tra, `docs/STATUS.md` mục 2.1):
+**Sửa giao diện**: màu ở khối `:root` đầu `resources/css/hfarm.css`; câu chữ ở `messages/messages_vi.properties` (và `messages_en.properties`), chỉ ghi các câu muốn đổi, câu khác dùng bản có sẵn của Keycloak; ảnh ở `resources/img/` (`logo.png`, `favicon.ico`). Muốn thử trước mà không đụng Keycloak thật: chạy một container Keycloak riêng (tên, cổng, không có volume), nạp realm từ file JSON có `"loginTheme": "hfarm"`, rồi `docker rm -f` khi xong (đây là cách đã dùng để kiểm tra, `docs/STATUS.md` mục 2.1):
 
 ```powershell
 docker run -d --name hfarm-kc-theme -p 127.0.0.1:18082:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=<TEN_TAM> -e KC_BOOTSTRAP_ADMIN_PASSWORD=<MAT_KHAU_NGAU_NHIEN> -v "<THU_MUC_CHUA_JSON_REALM>:/opt/keycloak/data/import" -v "<THU_MUC_DU_AN>\keycloak\themes\hfarm:/opt/keycloak/themes/hfarm:ro" quay.io/keycloak/keycloak:26.8.1 start-dev --import-realm

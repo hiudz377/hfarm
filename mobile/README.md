@@ -53,6 +53,10 @@ src/app/         màn hình (Expo Router)
   favorites      Yêu thích: sản phẩm đã thả tim (mở từ tab Tài khoản; bỏ tim thì thẻ biến mất ngay)
   review         Đánh giá sản phẩm (modal): chọn sao + nhận xét cho một món trong đơn Hoàn thành
                  (mở từ nút "Đánh giá sản phẩm" ở order/[id]; đánh giá ở trạng thái chờ duyệt cho tới khi CMS duyệt)
+  contact        Liên hệ & hỗ trợ: tên/địa chỉ/giờ mở cửa + nút Gọi / Zalo / Email + lối vào các chính sách (CÔNG KHAI, không cần đăng nhập)
+  policy/[slug]  Chính sách đổi trả / bảo mật + Điều khoản sử dụng (/policy/returns | privacy | terms; công khai)
+  size-guide     Hướng dẫn chọn size (modal, mở từ trang sản phẩm; ?size= để tô sẵn dòng size đang chọn)
+src/content/     policies.js (nội dung 3 chính sách), sizeGuide.js (bảng size + hàm gợi ý size): sửa ở đây là đủ
 src/api/         client.js (axios duy nhất), products (danh sách, gợi ý, liên quan, danh mục/size/màu/thương hiệu), cart,
                  orders (quote, đặt, danh sách, chi tiết, hủy), addresses, me, favorites, reviews, auth (cấu hình + đăng ký trong app)
 src/auth/        AuthProvider (React: trạng thái đăng nhập), keycloak.js (lõi OAuth: đăng nhập, làm mới token, đăng xuất),
@@ -62,6 +66,7 @@ src/components/  LoginPanel (lời mời đăng nhập), LoginForm (form Đăng 
                  OrderCard, StatusBadge, Timeline (theo dõi đơn), MenuRow, AddressCard
   Trang chủ     HeroCarousel (banner từ CMS, mặc định khi chưa có), CategoryTiles (ô danh mục tròn), ProductRail (dải Hàng mới về / Bán chạy / Đang giảm giá), Skeleton (khung chờ khi tải)
   Thanh toán    PaymentQR (mã VietQR + đếm ngược hạn trả + sao chép + tự cập nhật khi tiền về), AddedToast (thanh "Đã thêm vào giỏ hàng")
+  Hỗ trợ        ContactActions (nút Gọi / Nhắn Zalo / Gửi email; chỉ hiện kênh cửa hàng đã cấu hình, có mã đơn thì điền sẵn vào email)
   Bộ lọc        FilterSheet: bảng lọc + sắp xếp trượt từ dưới lên (sắp xếp, khoảng giá, size chữ / size số, màu, thương hiệu, "chỉ còn hàng");
                  chỉnh trên bản nháp, bấm "Áp dụng" mới đổi danh sách
   Tìm kiếm      SearchOverlay: lớp hiện khi vào ô tìm kiếm ("Tìm kiếm gần đây" + "Phổ biến" khi chưa gõ; gợi ý sản phẩm khi đang gõ)
@@ -73,6 +78,12 @@ src/utils/       config, theme, format (tiền, ngày, ảnh), queryKeys (khóa 
                  useMounted, useFavorites (danh sách id đã thích, cập nhật lạc quan),
                  productFilters (trạng thái bộ lọc + sắp xếp, thuần JS), searchHistory + searchTerms (lịch sử tìm kiếm lưu bằng AsyncStorage, tô đậm chữ khớp)
 ```
+
+Liên hệ, chính sách và hướng dẫn chọn size (2026-11-25):
+- **Thông tin liên hệ không nằm trong app**: backend đọc `STORE_NAME`, `STORE_PHONE`, `STORE_ZALO`, `STORE_EMAIL`, `STORE_ADDRESS`, `STORE_HOURS` và `RETURN_DAYS` từ `backend/.env` rồi trả ở `GET /api/store` (hook `useStore`). Đổi số điện thoại chỉ cần sửa `.env` + restart backend, không phải build lại app. Kênh nào để trống thì nút đó ẩn; không đặt gì thì màn Liên hệ báo "chưa cập nhật thông tin liên hệ".
+- Lối vào: tab Tài khoản (mục Hỗ trợ), màn Liên hệ (cũng mở được khi chưa đăng nhập, từ dòng "Liên hệ & chính sách" ở lời mời đăng nhập), khối "Cần hỗ trợ?" ở cuối chi tiết đơn (lời nhắn đổi theo trạng thái; có mã đơn điền sẵn trong email), dòng đồng ý Điều khoản + Chính sách bảo mật ở tab Đăng ký.
+- **`src/content/policies.js` là BẢN NHÁP MẪU**, chủ cửa hàng phải đọc và sửa cho đúng quy định thật (thời hạn đổi trả, ai trả phí vận chuyển, thời gian hoàn tiền) trước khi phát hành; cập nhật lại khi app đổi cách thu thập dữ liệu (thêm Sentry/Firebase/quảng cáo/vị trí/thông báo đẩy) hoặc khi chạy trên máy chủ HTTPS thật. **`src/content/sizeGuide.js`**: số đo là số liệu tham khảo thông dụng, không phải số đo thật của hàng; đối chiếu với bảng size của xưởng rồi sửa.
+- Chính sách xem được khi chưa đăng nhập (cửa hàng ứng dụng yêu cầu). URL chính sách công khai (Google Play / App Store hỏi khi nộp) thì cần tên miền, hiện chưa có: bản trong app chỉ đáp ứng phần hiển thị trong ứng dụng.
 
 Cách dùng bộ lọc và tìm kiếm (màn Cửa hàng):
 - **Tìm kiếm**: chạm ô tìm kiếm để mở lớp gợi ý; danh sách chỉ lọc khi bấm Enter, chọn một gợi ý hoặc chọn từ lịch sử (không lọc ngay khi gõ). Gợi ý gọi `GET /api/products/suggest`, lịch sử (tối đa 8 từ khóa) lưu trên máy bằng `@react-native-async-storage/async-storage`.

@@ -49,16 +49,6 @@ const pageNames = {
   '/banners': 'Banner',
 };
 
-function BrandMark() {
-  return (
-    <svg className="brand-mark" width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <path d="M25.8 5.3C16 5.3 8 9.2 8 17.2c0 3.5 2.5 5.7 5.6 5.7 7.7 0 12.2-7.5 12.2-17.6Z" fill="currentColor" />
-      <path d="M6 27c3.4-7.2 8-11.4 15.1-15" stroke="#183C21" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M6.2 14.4c3.2-.2 5.8.8 7.9 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export default function AdminLayout() {
   const { message } = App.useApp();
   const { user, isAdmin, roleLabel, logout, accountUrl } = useAuth();
@@ -175,12 +165,14 @@ export default function AdminLayout() {
     <Layout className="admin-layout" style={{ minHeight: '100vh' }}>
       <Layout.Sider className="admin-sider" breakpoint="lg" collapsedWidth={64} collapsible trigger={null} collapsed={collapsed}
         onBreakpoint={(broken) => { if (broken) setCollapsed(true); }}>
+        {/* Logo nền kem trong thẻ bo góc (chữ xanh đậm của logo không đọc được trực tiếp trên nền xanh của thanh bên).
+            Thu gọn thanh bên: chỉ còn biểu tượng (CSS ẩn/hiện hai ảnh theo .ant-layout-sider-collapsed) */}
         <div className="brand-lockup">
-          <BrandMark />
-          <div className="brand-copy">
-            <Typography.Text strong className="brand-name">HFarm</Typography.Text>
-            <Typography.Text className="brand-subtitle">QUẢN TRỊ CỬA HÀNG</Typography.Text>
+          <div className="brand-card">
+            <img className="brand-logo-full" src="/logo-compact.png" alt="HFarm Thời trang" />
+            <img className="brand-logo-mini" src="/logo-mark.png" alt="HFarm" />
           </div>
+          <Typography.Text className="brand-subtitle">QUẢN TRỊ CỬA HÀNG</Typography.Text>
         </div>
         <Menu
           className="admin-menu"
