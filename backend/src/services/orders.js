@@ -4,6 +4,7 @@ const { httpError, tx } = require('../utils');
 const { changeStock } = require('./stock');
 const { feeFor } = require('./shipping');
 const { bankConfig, holdMinutes } = require('./paymentConfig');
+const { groupDiscount } = require('./groupBuy');
 
 // Phí ship tính theo vùng của tỉnh nhận hàng (bảng shipping_zones, chỉnh trong CMS): xem services/shipping.js
 // Đơn vị vận chuyển mặc định khi nhân viên không nhập (đặt DEFAULT_CARRIER trong .env để đổi)
@@ -80,7 +81,7 @@ function mergeLines(items) {
   return [...merged.entries()].sort((a, b) => a[0] - b[0]);
 }
 
-// Đọc giá từng biến thể (phải còn bán). exec: pool hoặc connection trong transaction.
+// Đọc giá từng mẫu mã (phải còn bán). exec: pool hoặc connection trong transaction.
 async function priceLines(exec, lines) {
   let subtotal = 0;
   const detailed = [];
@@ -130,8 +131,12 @@ function computeTotals(subtotal, discount, shippingFee) {
 async function quoteOrder(userId, body) {
   const { items } = await resolveItems(userId, body);
   const lines = mergeLines(items);
-  const { subtotal } = await priceLines(db, lines);
-  const { discount } = await applyCoupon(db, { code: body.coupon_code, subtotal, userId });
+  const { subtotal, detailed } = await priceLines(db, lines);
+  // Mua nhóm (services/groupBuy.js): giảm cho suất đã mua nhóm thành công, bằng 0 nếu khách không có suất nào.
+  // Mã giảm giá tính trên phần còn lại sau khi giảm giá nhóm. Cùng cách tính với createOrder.
+  const group = await groupDiscount(db, { userId, detailed });
+  const { discount: couponDiscount } = await applyCoupon(db, { code: body.coupon_code, subtotal: subtotal - group.discount, userId });
+  const discount = couponDiscount + group.discount;
   let province = body.province || '';
   if (body.address_id) {
     const [a] = await db.query('SELECT province FROM addresses WHERE id = ? AND user_id = ?', [body.address_id, userId]);
@@ -139,7 +144,7 @@ async function quoteOrder(userId, body) {
     province = a[0].province;
   }
   const ship = await feeFor(db, province, subtotal);
-  return { ...computeTotals(subtotal, discount, ship.fee), shipping_zone: ship };
+  return { ...computeTotals(subtotal, discount, ship.fee), group_discount: group.discount, shipping_zone: ship };
 }
 
 // Đặt hàng. body: { address_id | (recipient_name, recipient_phone, province, district, ward, address_detail),
@@ -179,7 +184,10 @@ async function createOrder(userId, body) {
     }
 
     const { subtotal, detailed } = await priceLines(conn, orderLines);
-    const { coupon, discount } = await applyCoupon(conn, { code: body.coupon_code, subtotal, userId, forUpdate: true });
+    // Mua nhóm: khóa các suất giảm giá của khách rồi tính giảm giá (bằng 0 nếu không có). markUsed ghi đơn vào các suất đó.
+    const group = await groupDiscount(conn, { userId, detailed, forUpdate: true });
+    const { coupon, discount: couponDiscount } = await applyCoupon(conn, { code: body.coupon_code, subtotal: subtotal - group.discount, userId, forUpdate: true });
+    const discount = couponDiscount + group.discount;
     const ship = await feeFor(conn, addr.province, subtotal);
     const { shipping_fee: shippingFee, total_amount: total } = computeTotals(subtotal, discount, ship.fee);
 
@@ -223,13 +231,14 @@ async function createOrder(userId, body) {
       [orderId, userId, null, 'PENDING', 'Khách đặt hàng']);
     if (coupon) {
       await conn.query('INSERT INTO coupon_usages (coupon_id, user_id, order_id, discount_amount) VALUES (?,?,?,?)',
-        [coupon.id, userId, orderId, discount]);
+        [coupon.id, userId, orderId, couponDiscount]);
       await conn.query('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?', [coupon.id]);
     }
+    await group.markUsed(conn, orderId);
     if (cartId) await conn.query("UPDATE carts SET status = 'CONVERTED' WHERE id = ?", [cartId]);
 
-    return { id: orderId, order_code: orderCode, subtotal, discount_amount: discount, shipping_fee: shippingFee, total_amount: total,
-      shipping_zone: ship };
+    return { id: orderId, order_code: orderCode, subtotal, discount_amount: discount, group_discount: group.discount,
+      shipping_fee: shippingFee, total_amount: total, shipping_zone: ship };
   });
 }
 
@@ -378,7 +387,9 @@ async function getOrderDetail(orderId, ownerId = null) {
      LEFT JOIN users u ON u.id = h.changed_by WHERE h.order_id = ? ORDER BY h.id`, [orderId]);
   const [payments] = await db.query('SELECT * FROM payments WHERE order_id = ?', [orderId]);
   const [shipments] = await db.query('SELECT * FROM shipments WHERE order_id = ?', [orderId]);
-  return { ...order, items, history, payment: payments[0] || null, shipment: shipments[0] || null };
+  // Phần giảm giá do mua nhóm nằm trong discount_amount; trả riêng để app / CMS ghi rõ "giá mua nhóm"
+  const [[grp]] = await db.query('SELECT COALESCE(SUM(discount_amount), 0) AS d FROM buy_group_members WHERE order_id = ?', [orderId]);
+  return { ...order, items, history, payment: payments[0] || null, shipment: shipments[0] || null, group_discount: Number(grp.d) };
 }
 
 module.exports = {

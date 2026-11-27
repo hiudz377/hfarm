@@ -4,6 +4,7 @@ const db = require('../db');
 const { wrap, paging, httpError } = require('../utils');
 const { authenticate } = require('../middleware/auth');
 const { createOrder, quoteOrder, changeOrderStatus, getOrderDetail, TRANSITIONS } = require('../services/orders');
+const { getGift } = require('../services/giftOrders');
 const { getPaymentInfo } = require('../services/payments');
 const { getOrderTracking } = require('../services/tracking');
 
@@ -37,7 +38,11 @@ router.get('/', wrap(async (req, res) => {
   res.json(rows);
 }));
 
-router.get('/:id', wrap(async (req, res) => res.json(await getOrderDetail(req.params.id, req.user.id))));
+// Kèm gift (thiệp, ẩn giá, gói quà) nếu là đơn quà tặng, không thì gift = null
+router.get('/:id', wrap(async (req, res) => {
+  const detail = await getOrderDetail(req.params.id, req.user.id);
+  res.json({ ...detail, gift: await getGift(detail.id) });
+}));
 
 // Thông tin để chuyển khoản đơn này: mã VietQR (ảnh PNG dạng data URL + chuỗi gốc), số tài khoản, nội dung, số giây còn lại.
 // Hết hạn / đã trả / đã hủy thì payable = false và không có mã QR. Chỉ dùng cho đơn chọn chuyển khoản.

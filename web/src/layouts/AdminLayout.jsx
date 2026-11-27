@@ -4,7 +4,7 @@ import { App, Avatar, Badge, Breadcrumb, Dropdown, Layout, Menu, Skeleton, Typog
 import {
   AppstoreOutlined, BankOutlined, BellOutlined, CarOutlined, DashboardOutlined, DownOutlined, GiftOutlined, InboxOutlined,
   LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, PictureOutlined, SkinOutlined, ShoppingCartOutlined, StarOutlined,
-  TagsOutlined, TeamOutlined, UserOutlined, WarningOutlined,
+  TagsOutlined, TeamOutlined, UserOutlined, UsergroupAddOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api';
@@ -15,6 +15,7 @@ const menuItems = [
   { key: '/', icon: <DashboardOutlined />, label: 'Tổng quan' },
   { type: 'group', label: 'Bán hàng', children: [
     { key: '/orders', icon: <ShoppingCartOutlined />, label: 'Đơn hàng' },
+    { key: '/groups', icon: <UsergroupAddOutlined />, label: 'Mua nhóm' },
     { key: '/reviews', icon: <StarOutlined />, label: 'Đánh giá' },
     { key: '/customers', icon: <TeamOutlined />, label: 'Khách hàng', adminOnly: true },
     { key: '/coupons', icon: <GiftOutlined />, label: 'Mã giảm giá', adminOnly: true },
@@ -33,6 +34,11 @@ const menuItems = [
   ] },
 ];
 
+// Nhãn menu kèm huy hiệu số: chữ tự rút gọn (…) nếu thiếu chỗ, huy hiệu luôn giữ nguyên
+const countLabel = (text, count) => (
+  <span className="menu-order-label"><span className="menu-order-text">{text}</span><Badge count={count} overflowCount={99} size="small" /></span>
+);
+
 const pageNames = {
   '/': 'Tổng quan',
   '/products': 'Sản phẩm',
@@ -40,6 +46,7 @@ const pageNames = {
   '/brands': 'Thương hiệu',
   '/attributes': 'Size & Màu',
   '/orders': 'Đơn hàng',
+  '/groups': 'Mua nhóm',
   '/reviews': 'Đánh giá',
   '/customers': 'Khách hàng',
   '/coupons': 'Mã giảm giá',
@@ -86,7 +93,7 @@ export default function AdminLayout() {
         if (active) setPendingReviews(response.data.PENDING);
       } catch { /* bỏ qua */ }
     };
-    // Số biến thể sắp hết hàng (≤ 5): cũng chỉ là con số phụ, lỗi thì bỏ qua
+    // Số mẫu mã sắp hết hàng (≤ 5): cũng chỉ là con số phụ, lỗi thì bỏ qua
     const loadLowStock = async () => {
       try {
         const response = await api.get('/admin/inventory', { params: { page: 1, limit: 1 } });
@@ -118,13 +125,13 @@ export default function AdminLayout() {
         ?.filter((child) => isAdmin || !child.adminOnly)
         .map(({ adminOnly, ...child }) => child.key === '/orders' ? {
           ...child,
-          label: <span className="menu-order-label">Đơn hàng<Badge count={pendingOrders} overflowCount={99} size="small" /></span>,
+          label: countLabel('Đơn hàng', pendingOrders),
         } : child.key === '/reviews' ? {
           ...child,
-          label: <span className="menu-order-label">Đánh giá<Badge count={pendingReviews} overflowCount={99} size="small" /></span>,
+          label: countLabel('Đánh giá', pendingReviews),
         } : child.key === '/bank-transactions' ? {
           ...child,
-          label: <span className="menu-order-label">Giao dịch ngân hàng<Badge count={bankTodo} overflowCount={99} size="small" /></span>,
+          label: countLabel('Giao dịch ngân hàng', bankTodo),
         } : child),
     }))
     .filter((item) => !item.children || item.children.length > 0), // bỏ nhóm không còn mục nào
@@ -134,7 +141,7 @@ export default function AdminLayout() {
   const todo = [
     { key: '/orders', count: pendingOrders, icon: <ShoppingCartOutlined />, text: 'đơn chờ xác nhận' },
     { key: '/reviews', count: pendingReviews, icon: <StarOutlined />, text: 'đánh giá chờ duyệt' },
-    { key: '/inventory', count: lowStock, icon: <WarningOutlined />, text: 'biến thể sắp hết hàng' },
+    { key: '/inventory', count: lowStock, icon: <WarningOutlined />, text: 'mẫu mã sắp hết hàng' },
     { key: '/bank-transactions', count: bankTodo, icon: <BankOutlined />, text: 'giao dịch ngân hàng cần xử lý' },
   ].filter((t) => t.count > 0);
   const bellCount = todo.reduce((sum, t) => sum + t.count, 0);
@@ -163,7 +170,7 @@ export default function AdminLayout() {
 
   return (
     <Layout className="admin-layout" style={{ minHeight: '100vh' }}>
-      <Layout.Sider className="admin-sider" breakpoint="lg" collapsedWidth={64} collapsible trigger={null} collapsed={collapsed}
+      <Layout.Sider className="admin-sider" width={240} breakpoint="lg" collapsedWidth={64} collapsible trigger={null} collapsed={collapsed}
         onBreakpoint={(broken) => { if (broken) setCollapsed(true); }}>
         {/* Logo nền kem trong thẻ bo góc (chữ xanh đậm của logo không đọc được trực tiếp trên nền xanh của thanh bên).
             Thu gọn thanh bên: chỉ còn biểu tượng (CSS ẩn/hiện hai ảnh theo .ant-layout-sider-collapsed) */}

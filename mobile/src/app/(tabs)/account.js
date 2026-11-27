@@ -89,6 +89,7 @@ function AccountScreen() {
         <MenuRow icon="person-outline" title="Thông tin cá nhân" subtitle="Họ tên, số điện thoại" onPress={() => router.push('/profile')} />
         <MenuRow icon="heart-outline" title="Sản phẩm yêu thích" subtitle="Những sản phẩm bạn đã thả tim" onPress={() => router.push('/favorites')} />
         <MenuRow icon="location-outline" title="Sổ địa chỉ" subtitle="Thêm, sửa, xóa, đặt mặc định" onPress={() => router.push('/addresses')} />
+        <MenuRow icon="people-outline" title="Mua nhóm của tôi" subtitle="Nhóm đang rủ bạn, nhập mã nhóm" onPress={() => router.push('/groups')} />
         <MenuRow icon="receipt-outline" title="Đơn hàng của tôi" subtitle="Xem và theo dõi đơn" onPress={() => router.navigate('/orders')} last />
       </Card>
 

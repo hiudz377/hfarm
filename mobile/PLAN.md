@@ -50,7 +50,7 @@ Mobile:
 Đã chạy thật:
 - `npx expo-doctor` 20/20; `npx expo export` bundle được Android + iOS (dùng Node 24; Node mặc định của máy là 20.18, thấp hơn yêu cầu >= 22.13 của app).
 - `validate.js`: 9 nhóm test thuần (SĐT hợp lệ/không hợp lệ, +84, thiếu từng trường, độ dài, trường rỗng/null).
-- Backend, đối chiếu bản `createOrder` GỐC với bản mới trên DB giả: 26 kịch bản (giỏ/body, biên 500.000, mã %/cố định/trần, hết lượt, quá lượt mỗi người, tối thiểu, biến thể ngừng bán, hết kho + rollback, địa chỉ, payment_method lạ...) cho **cùng chuỗi SQL, kết quả, lỗi và tồn kho**; `quoteOrder` khớp `createOrder` và không phát câu ghi/khóa nào.
+- Backend, đối chiếu bản `createOrder` GỐC với bản mới trên DB giả: 26 kịch bản (giỏ/body, biên 500.000, mã %/cố định/trần, hết lượt, quá lượt mỗi người, tối thiểu, mẫu mã ngừng bán, hết kho + rollback, địa chỉ, payment_method lạ...) cho **cùng chuỗi SQL, kết quả, lỗi và tồn kho**; `quoteOrder` khớp `createOrder` và không phát câu ghi/khóa nào.
 - API thật trên **MySQL thật** nhưng ở một **database tạm** (`hfarm_scratch_p2`, dựng từ `schema.sql` + dữ liệu mẫu nhỏ, đã xóa xong; `clothing_store` không bị đụng): 21 nhóm kiểm tra (quote đủ trường hợp, quote không đổi kho/mã/đơn, địa chỉ mặc định, đặt hàng khớp quote, `payments`, `used_count`, lỗi hết kho + rollback, mã một lần mỗi người).
 - **E2E trình duyệt**: bản web của app (Expo Router thật + react-native-web, ở thư mục tạm ngoài repo) trên Edge -> backend thật -> DB tạm; **30 bước đạt**: badge ngay khi thêm giỏ, chặn quá tồn, stepper, cảnh báo vượt tồn/hết hàng, xóa có xác nhận (Hủy/Xóa), mã giảm giá (sai/tối thiểu/đúng/tự tính lại), thanh toán, thêm địa chỉ (lỗi từng ô, SĐT sai, +84), tự chọn địa chỉ mới, chuyển khoản, **bấm đúp chỉ tạo 1 đơn**, kiểm tra đơn trong DB, tồn kho sản phẩm cập nhật sau đặt, lỗi hết hàng lúc đặt, mất kết nối trước/sau khi server ghi đơn, mã bị vô hiệu giữa chừng, giỏ trống, chỉ có 1 thanh tab sau khi điều hướng, console không lỗi.
 
@@ -122,13 +122,13 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 ### 4.1 Lọc và sắp xếp ở Cửa hàng
 - [x] Backend `GET /api/products`: `sort` (newest | price_asc | price_desc | bestseller), `min_price`/`max_price`, `size_id`, `color_id`, `brand_id` (nhiều id), `in_stock`. `sort` chỉ nhận giá trị trong danh sách (không ghép chuỗi vào SQL); đầu vào sai trả 400. CMS dùng chung hàm nên cũng có các tham số này.
 - [x] Mobile: nút "Lọc và sắp xếp" (dấu số nhóm lọc đang bật, "N sản phẩm · kiểu sắp xếp", "Xóa lọc" giữ kiểu sắp xếp), bảng trượt từ dưới lên `FilterSheet` (sắp xếp, 4 khoảng giá, size, màu có chấm màu, thương hiệu, "chỉ còn hàng"), nháp chỉ áp dụng khi bấm "Áp dụng"; màn trống có nút "Xóa bộ lọc"
-- Kiểm tra đã chạy: API trên MySQL thật nhưng database tạm (đã xóa; `clothing_store` không bị đụng) 51 kiểm tra đạt (từng bộ lọc và tổ hợp, biên giá, biến thể ngừng bán/sản phẩm nháp không lọt vào, size + màu + còn hàng phải cùng một biến thể, phân trang khi sắp xếp, đầu vào xấu/chèn SQL trả 400, CMS giữ hành vi cũ); logic lọc của app 23 kiểm tra; `expo export` Android + iOS; bản web của app trên Edge nối backend + DB tạm, 32 bước đạt.
+- Kiểm tra đã chạy: API trên MySQL thật nhưng database tạm (đã xóa; `clothing_store` không bị đụng) 51 kiểm tra đạt (từng bộ lọc và tổ hợp, biên giá, mẫu mã ngừng bán/sản phẩm nháp không lọt vào, size + màu + còn hàng phải cùng một mẫu mã, phân trang khi sắp xếp, đầu vào xấu/chèn SQL trả 400, CMS giữ hành vi cũ); logic lọc của app 23 kiểm tra; `expo export` Android + iOS; bản web của app trên Edge nối backend + DB tạm, 32 bước đạt.
 - **Chưa kiểm tra**: trên điện thoại / Expo Go (Modal trượt, `Switch`, vùng an toàn phía dưới bảng, nút Back của Android đóng bảng).
 
 ### 4.2 Size chữ / size số tách riêng + chỉ hiện mục đang dùng (sửa 4.1 theo góp ý)
 - [x] Backend `GET /sizes` trả `size_group` (LETTER | NUMBER | OTHER) và xếp chữ -> số -> khác; size chữ xếp theo nghĩa (XS < S < M < L < XL < XXL = 2XL), size số theo giá trị số. Suy ra từ tên size, không đổi database. `?in_use=1` (cũng có ở `/colors`, `/brands`) chỉ trả mục có sản phẩm ĐANG BÁN dùng
 - [x] Bảng lọc mobile: cụm "Size chữ" và "Size số" (+ "Khác"), tiêu đề cụm chỉ hiện khi có từ hai cụm; không còn hiện size/màu/thương hiệu mà chọn xong chỉ ra kết quả trống
-- Kiểm tra đã chạy: 39 kiểm tra thuần cho nhóm/thứ tự size; API trên DB tạm (sizes, colors, brands, `in_use`, size chỉ có ở sản phẩm nháp/biến thể tắt bị ẩn); bản web của app 37 bước đạt (cả 4.1).
+- Kiểm tra đã chạy: 39 kiểm tra thuần cho nhóm/thứ tự size; API trên DB tạm (sizes, colors, brands, `in_use`, size chỉ có ở sản phẩm nháp/mẫu mã tắt bị ẩn); bản web của app 37 bước đạt (cả 4.1).
 
 ### 4.3 Mã vận đơn tự sinh + trang Đơn hàng CMS xử lý nhanh (làm ở backend + web, không đổi app mobile)
 - [x] Mã vận đơn `HF` + yyMMdd + 6 ký tự (bỏ I, O, 0, 1) tự sinh khi chuyển sang Đang giao nếu không nhập; đơn vị mặc định `HFarm Express` (`DEFAULT_CARRIER`). Khách xem mã này trong chi tiết đơn trên mobile như trước
@@ -144,7 +144,7 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 
 ### 4.5 Chi tiết sản phẩm đầy đủ hơn + sản phẩm liên quan
 - [x] Thư viện ảnh có ảnh nhỏ bấm chuyển, nhãn giảm giá và giá gạch ngang (chỉ khi đã chọn phiên bản hoặc mọi phiên bản cùng giá, để không hiện nhãn đi kèm khoảng giá), đánh giá sao + "Đã bán N", khối "Thông tin sản phẩm" (danh mục, thương hiệu, SKU của phiên bản đang chọn, tình trạng), mô tả "Xem thêm / Thu gọn", chia sẻ (`Share` của React Native), phần Đánh giá (điểm trung bình + phân bố + danh sách, tải thêm), dải ngang "Sản phẩm liên quan"
-- [x] Backend: `GET /products/:id/related`; chi tiết trả `rating_avg`, `rating_count`, `sold_count`, biến thể xếp size chữ trước size số (XS < S < M < L < XL < 2XL, số tăng dần); thẻ sản phẩm có giá gạch + nhãn giảm giá + điểm đánh giá
+- [x] Backend: `GET /products/:id/related`; chi tiết trả `rating_avg`, `rating_count`, `sold_count`, mẫu mã xếp size chữ trước size số (XS < S < M < L < XL < 2XL, số tăng dần); thẻ sản phẩm có giá gạch + nhãn giảm giá + điểm đánh giá
 
 ### 4.6 Yêu thích
 - [x] Backend `/api/favorites` (ids, danh sách phân trang, thích, bỏ thích; thích lặp lại vẫn một dòng; sản phẩm bị ẩn không hiện trong danh sách)
@@ -156,7 +156,7 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - [x] CMS: trang "Đánh giá" (tab Chờ duyệt / Đã duyệt / Đã ẩn / Tất cả có số đếm, tìm theo sản phẩm/người/nội dung, lọc số sao, duyệt / ẩn / duyệt lại từng cái hoặc hàng loạt), huy hiệu số chờ duyệt trên menu
 
 ### 4.8 CMS đẹp và chuyên nghiệp hơn
-- [x] Tổng quan: khu "Cần xử lý" (đơn chờ xác nhận, đánh giá chờ duyệt, biến thể sắp hết hàng, bấm để tới trang tương ứng), dòng số liệu phụ dưới thẻ KPI, bảng "Đơn hàng gần đây", biểu đồ trạng thái đơn dùng đúng màu nhãn trạng thái
+- [x] Tổng quan: khu "Cần xử lý" (đơn chờ xác nhận, đánh giá chờ duyệt, mẫu mã sắp hết hàng, bấm để tới trang tương ứng), dòng số liệu phụ dưới thẻ KPI, bảng "Đơn hàng gần đây", biểu đồ trạng thái đơn dùng đúng màu nhãn trạng thái
 - [x] Sản phẩm: ảnh nhỏ + thương hiệu/danh mục dưới tên, giá gạch, nhãn tồn kho theo mức (hết hàng / sắp hết / còn), điểm đánh giá, bộ lọc nằm trong thẻ, thao tác bằng nút biểu tượng có chú thích; favicon HFarm
 - Các trang còn lại (Khách hàng, Mã giảm giá, Danh mục/Thương hiệu, Size & Màu, Kho hàng, ngăn sản phẩm, khung giao diện) đã làm đẹp ở mục 4.12; màn đăng nhập Keycloak của CMS vẫn chưa đụng tới
 
@@ -186,13 +186,13 @@ Cửa hàng (danh sách + danh mục) · Chi tiết sản phẩm (+404) · Giỏ
 - **Chưa kiểm tra**: Keycloak THẬT của người dùng (chưa chạy script trên đó; container `keycloak-hfarm` đang tắt), điện thoại / Expo Go, gửi email xác minh / quên mật khẩu (cần SMTP của realm), CMS đăng nhập (vẫn qua trang Keycloak, không đổi)
 
 ### 4.12 CMS chuyên nghiệp và đẹp hơn nữa (làm nốt các trang còn lại + khung giao diện)
-- [x] Khung: menu bên thu gọn được (nhớ lựa chọn, tự thu gọn trên màn hình hẹp, khi thu gọn tiêu đề nhóm thành vạch kẻ), breadcrumb, chuông "Cần xử lý" (đơn chờ xác nhận / đánh giá chờ duyệt / biến thể sắp hết hàng, bấm để tới trang tương ứng), tiêu đề tab trình duyệt theo trang, màu / bo góc / bảng / nút đồng bộ qua theme chung
+- [x] Khung: menu bên thu gọn được (nhớ lựa chọn, tự thu gọn trên màn hình hẹp, khi thu gọn tiêu đề nhóm thành vạch kẻ), breadcrumb, chuông "Cần xử lý" (đơn chờ xác nhận / đánh giá chờ duyệt / mẫu mã sắp hết hàng, bấm để tới trang tương ứng), tiêu đề tab trình duyệt theo trang, màu / bo góc / bảng / nút đồng bộ qua theme chung
 - [x] Khách hàng: ảnh đại diện chữ cái đầu + tên + email, tìm kiếm, lọc Tất cả / Hoạt động / Đã khóa (API `GET /api/admin/users?status=`), cột chi tiêu + ngày tham gia, khóa / mở khóa có hộp xác nhận, ngăn lịch sử mua hàng có thống kê
 - [x] Mã giảm giá: tab theo trạng thái (Đang chạy / Sắp diễn ra / Hết lượt / Hết hạn / Đã tắt) có số đếm, tìm kiếm, sao chép mã, huy hiệu ưu đãi, thanh lượt dùng đổi màu, ghi chú thời hạn ("Còn 5 ngày"), bật / tắt và sửa ngay trên dòng
 - [x] Size & Màu: size chia cụm Size chữ / Size số / Khác, xếp đúng thứ tự không phụ thuộc lúc thêm (sửa điểm yếu đã ghi ở 4.8); màu dạng thẻ có chấm màu + mã hex; báo rõ khi xóa size / màu đang được dùng
 - [x] Danh mục / Thương hiệu (trang CRUD dùng chung): bỏ cột ID, tìm kiếm, lọc trạng thái, đếm, hộp xác nhận xóa nói rõ hậu quả (thương hiệu: sản phẩm sẽ không còn thương hiệu; danh mục đang có sản phẩm: không xóa được)
 - [x] Kho hàng: thẻ KPI bấm để lọc (hết hàng / sắp hết / tất cả), tìm kiếm, ảnh + SKU, nhãn tồn kho theo mức; Tổng quan: biểu đồ doanh thu dạng vùng
-- [x] Ngăn sản phẩm: tiêu đề là tên sản phẩm + nhãn trạng thái, nút Lưu / Đóng cố định ở chân ngăn, các ô nhập rộng đều, chấm màu ở bảng biến thể
+- [x] Ngăn sản phẩm: tiêu đề là tên sản phẩm + nhãn trạng thái, nút Lưu / Đóng cố định ở chân ngăn, các ô nhập rộng đều, chấm màu ở bảng mẫu mã
 - Sửa trong lúc kiểm tra: tooltip của nút xóa / khóa nằm đè lên hộp xác nhận (che nút Hủy / Đồng ý) → component dùng chung `ConfirmButton` (áp dụng cho Khách hàng, Size & Màu, Danh mục / Thương hiệu, Sản phẩm); lỗi kiểm tra form (ô trống) thành "unhandled rejection" trong console ở mọi form (nay dùng `validate()` trong `utils.js`); cảnh báo `useForm is not connected` ở bản dev (Modal có `forceRender`); Tổng quan, Danh mục, Thương hiệu tràn ngang trên điện thoại (bảng cuộn ngang trong thẻ)
 - Kiểm tra đã chạy (Edge + Vite, backend + MySQL tạm, chế độ `VITE_AUTH_DISABLED`): trang mới 75 bước (lọc / khóa / mở khóa / lịch sử, tab + tìm + sao chép + bật tắt + tạo / sửa mã và báo lỗi nhập, cụm size + thêm + xóa đang dùng / không dùng, màu, danh mục / thương hiệu, KPI kho + nhập kho + lịch sử, ngăn sản phẩm, thu gọn menu + nhớ lựa chọn, chuông, màn hình hẹp, không lỗi console); chạy lại bộ cũ: Đơn hàng 40 bước, Tổng quan / Sản phẩm / Đánh giá 24 bước đều đạt; 10 trang không tràn ngang ở 390 / 768 / 1024 px; `vite build` thành công
 - **Chưa kiểm tra**: CMS khi đăng nhập Keycloak thật (menu theo vai trò staff / admin chỉ thử ở chế độ dev), Safari / Firefox (chỉ thử Edge), màn hình hẹp chỉ kiểm tra không tràn ngang và xem ảnh chụp (chưa dùng trên máy thật), hiệu năng với hàng nghìn khách / mã giảm giá (bảng Khách hàng phân trang phía máy chủ, Mã giảm giá lọc phía trình duyệt trên toàn bộ danh sách), màn đăng nhập Keycloak của CMS (chưa làm theme thương hiệu)
@@ -213,6 +213,27 @@ Làm theo đánh giá "app còn thiếu gì để dùng thật" (chưa cần tê
 - Sửa khi kiểm tra: `getPolicy('constructor')` (mở `/policy/constructor`) làm sập màn vì tra cứu thẳng vào object; nay chỉ nhận slug trong `POLICY_SLUGS`. Chữ "1–2 cm" bị ngắt dòng giữa chừng nên đổi thành "1 đến 2 cm".
 - Bẫy khi test web: RNW mở `tel:` bằng `window.location = ...` (không chặn được bằng `window.open`); test bọc `URL` để bắt. Kiểm tra: `docs/STATUS.md` mục 2.1. **Chưa kiểm tra**: điện thoại thật (mở app gọi/Zalo/thư, bàn phím số), trang đăng nhập dạng modal mở chính sách trên native.
 
+### 4.15 Stylist cá nhân: gợi ý cả bộ đồ (2026-11-26)
+Ý tưởng của chủ dự án: thay vì khách tự tìm đồ, app đóng vai stylist ("Hôm nay mặc gì?"): nhập giới tính, chiều cao, cân nặng, phong cách, hoàn cảnh, ngân sách -> nhận bộ đồ hoàn chỉnh, mua cả bộ hoặc từng món. Chủ dự án chọn **bộ máy chấm điểm trên server** (không dùng LLM: miễn phí, tức thì, không gửi số đo ra ngoài).
+- [x] Database: migration `003_outfit_stylist.sql` thêm 4 cột vào `products` (`gender`, `outfit_role`, `styles`, `occasions`); backend từ chối khởi động nếu thiếu (`migrations.js`), `docker-compose.yml` nạp tự động volume mới.
+- [x] Backend: `services/stylist.js` (bộ máy thuần, không đụng database: size theo số đo cùng bảng với màn Hướng dẫn chọn size, chọn mẫu mã đúng size, chấm điểm phong cách/hoàn cảnh/màu/đánh giá, duyệt tổ hợp, **không bao giờ vượt ngân sách**, tối đa 3 bộ khác nhau, lý do + "cần ngân sách từ X để thêm giày"), `routes/stylist.js` (`GET /api/stylist/options`, `POST /api/stylist/outfits`, giới hạn 30 lượt/phút/IP), thẻ Stylist trong `POST/PUT /api/admin/products` (kiểm tra mã), `getProduct` trả `styles[]`, `occasions[]`.
+- [x] CMS: mục "Gợi ý bộ đồ (Stylist)" trong ngăn sản phẩm (vai trò, phong cách, hoàn cảnh) + cột "Phối đồ" ở danh sách (thấy sản phẩm nào chưa gắn thẻ).
+- [x] App: màn `stylist` (form + kết quả), `OutfitCard` (từng món có nút thêm riêng, "Thêm cả bộ vào giỏ", món đã có trong giỏ thì bỏ qua để không nhân đôi), thẻ mời ở Trang chủ, nhớ thông tin lần trước (AsyncStorage `hfarm.stylist.profile`). Mua vẫn đi qua `POST /cart/items` từng món nên luồng giỏ/đặt hàng/trừ kho KHÔNG đổi.
+- [x] Test trong repo (đầu tiên của dự án): `cd backend && npm test` (13 test, gồm 400 lượt ngẫu nhiên kiểm tra bất biến ngân sách/hàng còn; đã thử phá code cố ý 5 kiểu, đều bị bắt).
+- Kiểm tra: xem `docs/STATUS.md` mục 2.1. **Chưa kiểm tra**: điện thoại thật; migration 003 trên `clothing_store` thật (người dùng phải chạy); chất lượng gợi ý với dữ liệu thẻ thật do nhân viên gắn.
+- [x] Đính chính cùng ngày (chủ dự án: "ui shop đồ nam thôi"): cửa hàng CHỈ bán đồ nam -> gỡ chọn giới tính (Nam/Nữ/Khác), vai trò váy/đầm và chữ "chân váy" khỏi API, app, CMS; ô tìm kiếm Trang chủ ghi "Tìm áo, quần, giày...". Cột `products.gender` và giá trị `DRESS` còn trong database (migration 003 đã chạy lên DB thật, migration chỉ được thêm) nhưng không dùng.
+- Hạn chế: chỉ phối sản phẩm đã gắn thẻ; size giày chỉ ước lượng theo chiều cao; điểm số/trọng số là kinh nghiệm (chỉnh ở đầu `services/stylist.js`), chưa có "đổi món", chưa lưu bộ đồ yêu thích.
+
+### 4.16 Mua nhóm + phong cách Luxury / Nhật Bản (2026-11-26)
+Chủ dự án: thêm phong cách Luxury và Nhật Bản cho Stylist; thêm "group buy": áo 300.000 ₫, nhóm 3 người 270.000 ₫/người, nhóm 5 người 240.000 ₫/người, tạo nhóm và gửi link mời bạn bè, đủ số lượng thì tự áp mức giá tương ứng. Chủ dự án chọn **sửa một đoạn nhỏ ở `services/orders.js`** (ngoại lệ cho quy tắc cấm đổi logic đặt hàng) thay vì phát voucher.
+- [x] Stylist: thêm `LUXURY` ("Luxury") và `JAPANESE` ("Nhật Bản") (tối đa 3 phong cách; hai phong cách này ưa màu trung tính như Minimalist). Chỉ là mã trong code, không cần migration (cột `styles` là chuỗi); sản phẩm của chủ dự án cần được gắn thẻ mới tính.
+- [x] Database: migration `004_group_buy.sql` (3 bảng + 2 cột `products`); backend từ chối khởi động nếu thiếu.
+- [x] Backend: `services/groupBuy.js` (bậc giá, tạo / vào / rời / hủy / đổi mẫu mã, chốt nhóm, tác vụ mỗi phút, `groupDiscount`), `routes/groups.js`, trang mời `routes/groupPage.js`, admin `routes/admin/groups.js` + `:id/group-buy`. `orders.js`: `quoteOrder` và `createOrder` tính giảm nhóm TRƯỚC mã giảm giá (mã tính trên phần còn lại), thêm `group_discount` vào báo giá / đơn / chi tiết đơn.
+- [x] App: thẻ "Mua nhóm" ở trang sản phẩm (bậc giá theo mẫu mã đang chọn), màn `group/[code]` (tiến độ theo bậc, đếm ngược theo giây của server, thành viên đã che tên, Mời bạn bè qua Share, đổi size/màu, rời / hủy, "Mua với giá nhóm" thêm vào giỏ), màn `groups` (nhập mã + nhóm của tôi), dòng "Giá mua nhóm" ở giỏ / thanh toán / chi tiết đơn, nhãn "Mua nhóm giảm đến N%" trên thẻ sản phẩm, mục "Mua nhóm của tôi" ở Tài khoản.
+- [x] CMS: mục "Mua nhóm" trong ngăn sản phẩm (bật/tắt, giờ, các bậc có xem trước giá, nút lưu riêng), trang "Mua nhóm" (danh sách, lọc, hủy nhóm), chi tiết đơn ghi "trong đó mua nhóm".
+- Kiểm tra: xem `docs/STATUS.md` mục 2.1. **Chưa kiểm tra**: điện thoại thật; mở link `hfarm://group/<mã>` và `PUBLIC_URL/g/<mã>` từ Zalo / Messenger trên điện thoại; migration 004 trên `clothing_store` thật.
+- Hạn chế: không thu tiền trước nên không có "bảo đảm" mua; tồn kho không giữ chỗ; một người dùng nhiều tài khoản có thể tự lập nhóm để lấy giá giảm (chưa chặn); chưa có thông báo đẩy khi nhóm chốt (khách phải mở app xem).
+
 ## Giả định và việc cần quyết định sau
 
 - Dữ liệu: repo không có dữ liệu mẫu sản phẩm, nên cần tự có sản phẩm (nhập qua web CMS) mới thấy gì ở Cửa hàng.
@@ -227,4 +248,4 @@ Làm theo đánh giá "app còn thiếu gì để dùng thật" (chưa cần tê
 - GĐ3 - đăng xuất ở chế độ dev: không có phiên thật để xóa. Nút vẫn có (xác nhận -> làm mới dữ liệu tạm -> về Cửa hàng) và hiện rõ "chế độ dev". Khi gắn Keycloak chỉ cần để `signOut()` trong `AuthProvider` xóa token thật.
 - GĐ3 - xóa địa chỉ mặc định: backend không tự chọn địa chỉ khác nên app tự chuyển mặc định sang địa chỉ mới nhất còn lại. Địa chỉ đang mặc định không thể "bỏ mặc định" (phải đặt địa chỉ khác làm mặc định).
 - GĐ3 - hồ sơ: email chỉ xem (đến từ tài khoản đăng nhập); số điện thoại bỏ trống = xóa số (lưu `null`).
-- Dữ liệu thật hiện có (đọc ngày 16/11/2026): 3 sản phẩm đang bán nhưng chỉ 2 biến thể, tổng tồn 6, 0 đơn; **không có mã `WELCOME10`**, chỉ có `HFARM1` (giảm 15%, tối đa 50.000 ₫, đơn từ 200.000 ₫, hiệu lực 27/11 - 12/12/2026, tối đa 9 lượt, 1 lượt/người) nên hôm nay chưa dùng được.
+- Dữ liệu thật hiện có (đọc ngày 16/11/2026): 3 sản phẩm đang bán nhưng chỉ 2 mẫu mã, tổng tồn 6, 0 đơn; **không có mã `WELCOME10`**, chỉ có `HFARM1` (giảm 15%, tối đa 50.000 ₫, đơn từ 200.000 ₫, hiệu lực 27/11 - 12/12/2026, tối đa 9 lượt, 1 lượt/người) nên hôm nay chưa dùng được.

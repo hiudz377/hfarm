@@ -69,6 +69,11 @@ export const PRODUCT_STATUS = {
   INACTIVE: { text: 'Ngừng bán', color: 'red' },
 };
 
+// Vai trò của sản phẩm trong một bộ đồ (Stylist). Danh sách gốc: backend/src/services/stylist.js (ROLES)
+export const OUTFIT_ROLES = {
+  TOP: 'Áo', BOTTOM: 'Quần', OUTERWEAR: 'Áo khoác', SHOES: 'Giày', ACCESSORY: 'Phụ kiện',
+};
+
 // ---- Size: nhóm chữ / số / khác (cùng cách suy ra với backend/src/services/sizes.js) ----
 const normSize = (name) => String(name ?? '').trim().toUpperCase().replace(/\s+/g, '');
 export const sizeGroup = (name) => {
@@ -118,3 +123,6 @@ export const avatarColor = (seed) => {
 };
 
 export const dateOnly = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : '');
+
+// Giá mỗi người sau giảm của Mua nhóm (làm tròn tới đồng). GIỐNG HỆT backend/src/services/groupBuy.js (groupPrice).
+export const groupPrice = (price, percent) => Math.round((Number(price) * (100 - Number(percent))) / 100);

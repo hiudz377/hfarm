@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nodemon index.js",
     "start": "node index.js",
+    "test": "node --test test/",
     "setup:keycloak": "node scripts/setup-keycloak.js"
   },
   "dependencies": {

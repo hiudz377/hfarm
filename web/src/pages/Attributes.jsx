@@ -119,7 +119,7 @@ export default function Attributes() {
     <>
       <PageHeader
         title="Size & Màu sắc"
-        description="Quản lý các thuộc tính dùng để tạo biến thể sản phẩm. Size chữ và size số tự xếp đúng thứ tự."
+        description="Quản lý các thuộc tính dùng để tạo mẫu mã sản phẩm. Size chữ và size số tự xếp đúng thứ tự."
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>{activeTab === 'sizes' ? 'Thêm size' : 'Thêm màu'}</Button>}
       />
       <Card className="surface-card">

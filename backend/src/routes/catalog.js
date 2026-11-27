@@ -6,7 +6,7 @@ const { listProducts, getProduct, suggestProducts, relatedProducts } = require('
 const { listReviews } = require('../services/reviews');
 const { groupSizes } = require('../services/sizes');
 
-// ?in_use=1: chỉ trả những mục đang có sản phẩm ĐANG BÁN dùng (size/màu có biến thể đang bán, thương hiệu có sản phẩm đang bán).
+// ?in_use=1: chỉ trả những mục đang có sản phẩm ĐANG BÁN dùng (size/màu có mẫu mã đang bán, thương hiệu có sản phẩm đang bán).
 // Mobile dùng cho bảng lọc để không hiện size/màu/thương hiệu mà chọn xong chỉ ra kết quả trống.
 const inUse = (req) => req.query.in_use === '1' || req.query.in_use === 'true';
 

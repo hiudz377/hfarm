@@ -24,6 +24,9 @@ services:
       - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./database/migrations/001_payment_shipping.sql:/docker-entrypoint-initdb.d/02-payment-shipping.sql:ro
       - ./database/migrations/002_banners.sql:/docker-entrypoint-initdb.d/03-banners.sql:ro
+      - ./database/migrations/003_outfit_stylist.sql:/docker-entrypoint-initdb.d/04-outfit-stylist.sql:ro
+      - ./database/migrations/004_group_buy.sql:/docker-entrypoint-initdb.d/05-group-buy.sql:ro
+      - ./database/migrations/005_gift_orders.sql:/docker-entrypoint-initdb.d/06-gift-orders.sql:ro
     ports:
       # 3307 để không đụng MySQL cài trên máy (3306). Dùng khi muốn mở Workbench vào MySQL trong Docker.
       - "${DB_HOST_PORT:-3307}:3306"
@@ -65,6 +68,7 @@ services:
       BANK_ACCOUNT_NAME: ${BANK_ACCOUNT_NAME:-}
       PAYMENT_WEBHOOK_KEY: ${PAYMENT_WEBHOOK_KEY:-}
       PAYMENT_HOLD_MINUTES: ${PAYMENT_HOLD_MINUTES:-1440}
+      GROUP_CLAIM_HOURS: ${GROUP_CLAIM_HOURS:-24}
       # Thông tin cửa hàng hiển thị trong app (để trống = app ẩn mục tương ứng). Xem backend/.env.example
       STORE_NAME: ${STORE_NAME:-HFarm}
       STORE_PHONE: ${STORE_PHONE:-}

@@ -6,6 +6,7 @@ require('dotenv').config();
 const { authenticate, requireRole, assertAuthConfig } = require('./src/middleware/auth');
 const { missingMigrations } = require('./src/migrations');
 const { expireUnpaidTransfers } = require('./src/services/payments');
+const { finalizeDueGroups } = require('./src/services/groupBuy');
 
 try {
   assertAuthConfig();
@@ -45,6 +46,14 @@ app.use('/api/payments', require('./src/routes/payments'));
 app.use('/api', require('./src/routes/shipping'));
 // Công khai: thông tin liên hệ + số ngày đổi trả của cửa hàng (biến STORE_*, RETURN_DAYS)
 app.use('/api/store', require('./src/routes/store'));
+// Công khai: Stylist gợi ý bộ đồ theo số đo, phong cách, hoàn cảnh, ngân sách (chỉ đọc, có giới hạn tần suất)
+app.use('/api/stylist', require('./src/routes/stylist'));
+// Quà tặng: gợi ý quà theo dịp + size + ngân sách, mẫu thiệp (công khai); đặt đơn quà cần đăng nhập (route tự kiểm tra)
+app.use('/api/gifts', require('./src/routes/gifts'));
+// Mua nhóm: xem nhóm công khai (người được mời xem trước), tạo / tham gia / rời / hủy cần đăng nhập (route tự kiểm tra)
+app.use('/api/groups', require('./src/routes/groups'));
+// Trang web mời mua nhóm (link gửi cho bạn bè), có nút mở app bằng hfarm://group/<mã>
+app.use('/g', require('./src/routes/groupPage'));
 // Cần đăng nhập (khách hàng)
 app.use('/api/me', require('./src/routes/me'));
 app.use('/api/cart', require('./src/routes/cart'));
@@ -82,6 +91,14 @@ async function start() {
   // Mỗi phút hủy các đơn chuyển khoản quá hạn chưa trả (hoàn kho). Đặt PAYMENT_EXPIRE_JOB=false để tắt.
   if (process.env.PAYMENT_EXPIRE_JOB !== 'false') {
     const tick = () => expireUnpaidTransfers().then((n) => { if (n) console.log(`Đã hủy ${n} đơn quá hạn thanh toán`); }).catch((e) => console.error('Lỗi tác vụ hủy đơn quá hạn:', e));
+    tick();
+    setInterval(tick, 60 * 1000).unref();
+  }
+
+  // Mỗi phút chốt các nhóm mua nhóm đã hết hạn (đạt bậc giá -> SUCCESS, không thì FAILED). Đặt GROUP_JOB=false để tắt
+  // (nhóm quá hạn vẫn được chốt ngay khi có người mở nhóm đó hoặc xem danh sách nhóm của mình).
+  if (process.env.GROUP_JOB !== 'false') {
+    const tick = () => finalizeDueGroups().then((n) => { if (n) console.log(`Đã chốt ${n} nhóm mua nhóm hết hạn`); }).catch((e) => console.error('Lỗi tác vụ chốt nhóm:', e));
     tick();
     setInterval(tick, 60 * 1000).unref();
   }

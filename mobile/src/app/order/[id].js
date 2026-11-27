@@ -11,6 +11,7 @@ import PaymentQR from '@/components/PaymentQR';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import ContactActions from '@/components/ContactActions';
+import GiftCardView from '@/components/GiftCardView';
 import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import PriceSummary from '@/components/PriceSummary';
@@ -215,6 +216,22 @@ export default function OrderDetail() {
           ))}
         </Section>
 
+        {order.gift ? (
+          <Section title="🎁 Quà tặng">
+            {order.gift.card ? (
+              <View style={styles.giftCard}>
+                <GiftCardView card={order.gift.card} message={order.gift.card_message} sender={order.gift.sender_name} width={200} />
+              </View>
+            ) : (
+              <Text style={styles.muted}>Không kèm thiệp.</Text>
+            )}
+            <Text style={styles.muted}>
+              {order.gift.hide_prices ? 'Phiếu giao hàng bỏ trong hộp không ghi giá.' : 'Phiếu giao hàng có ghi giá.'}
+              {order.gift.wrap ? ' Có gói quà.' : ''}
+            </Text>
+          </Section>
+        ) : null}
+
         <Section title="Địa chỉ nhận hàng">
           <Text style={styles.itemName}>{order.recipient_name} · {order.recipient_phone}</Text>
           <Text style={styles.addr}>
@@ -230,6 +247,7 @@ export default function OrderDetail() {
           <PriceSummary
             subtotal={order.subtotal}
             discount={order.discount_amount}
+            groupDiscount={order.group_discount ?? 0}
             shipping={order.shipping_fee}
             total={order.total_amount}
           />
@@ -273,6 +291,7 @@ const styles = StyleSheet.create({
   itemName: { fontSize: 14, fontWeight: '600', color: colors.text },
   itemTotal: { fontSize: 14, fontWeight: '600', color: colors.text },
   muted: { fontSize: 13, color: colors.muted },
+  giftCard: { alignItems: 'center', paddingVertical: space.sm },
   addr: { fontSize: 14, color: colors.text, lineHeight: 20 },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: space.md },
   label: { fontSize: 14, color: colors.muted },

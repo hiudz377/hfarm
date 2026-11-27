@@ -99,7 +99,7 @@ cho thanh nút cố định; ảnh luôn đi qua `Photo` (expo-image); thông b�
 - **Chuyển khoản VietQR (từ 2026-11-24)**: không còn thông tin giả trong app. Tài khoản nhận tiền đặt ở `backend/.env` (`BANK_BIN`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME`); thiếu thì app chỉ còn COD. Sau khi đặt đơn chuyển khoản, màn thành công (và Chi tiết đơn khi còn chưa trả) hiện mã QR đúng số tiền + nội dung, đếm ngược hạn trả, nút Chép, và tự chuyển sang "Đã nhận thanh toán" khi tiền về (hỏi server mỗi 4 giây).
 - **Phí ship theo vùng**: màn Thanh toán gửi `address_id` cho `/orders/quote`; đổi địa chỉ thì phí và "Dự kiến giao trong X ngày" đổi theo.
 - **Giao diện (2026-11-24)**: bảng màu xanh rừng + nền kem ở `src/utils/theme.js`; tab Trang chủ (mới) + tab Cửa hàng (danh sách, tìm kiếm, lọc); header trắng. Trang chủ mở tab Cửa hàng kèm tham số `collection=new|bestseller|sale`, `category=<id>`, `focus=1`.
-- Cần ít nhất 1 sản phẩm có biến thể còn hàng để thử luồng giỏ -> thanh toán; mã giảm giá tạo qua CMS (API `/api/admin/coupons`).
+- Cần ít nhất 1 sản phẩm có mẫu mã còn hàng để thử luồng giỏ -> thanh toán; mã giảm giá tạo qua CMS (API `/api/admin/coupons`).
 - Đặt hàng sẽ trừ tồn kho thật trong database. Muốn thử mà không đụng dữ liệu thật, hãy trỏ backend vào một database khác
   (`DB_NAME` trong `backend/.env`, dựng bằng `database/schema.sql` đã đổi tên database).
 

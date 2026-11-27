@@ -1,8 +1,10 @@
 const db = require('../db');
 const { paging, httpError } = require('../utils');
 const { groupSizes } = require('./sizes');
+const { splitTags } = require('./stylist');
+const { getGroupConfig } = require('./groupBuy');
 
-// Giá hiển thị/lọc/sắp xếp của một sản phẩm = giá thấp nhất trong các biến thể đang bán (không có thì lấy giá gốc)
+// Giá hiển thị/lọc/sắp xếp của một sản phẩm = giá thấp nhất trong các mẫu mã đang bán (không có thì lấy giá gốc)
 const PRICE = '(COALESCE((SELECT MIN(price) FROM product_variants WHERE product_id = p.id AND is_active = 1), p.base_price))';
 // Tổng số lượng đã bán (bỏ đơn hủy/hoàn trả, cùng cách tính với top_products ở /admin/stats)
 const SOLD = `(SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi
@@ -15,7 +17,8 @@ const RATING_AVG = "(SELECT ROUND(AVG(rt.rating), 1) FROM reviews rt WHERE rt.pr
 const RATING_COUNT = "(SELECT COUNT(*) FROM reviews rt WHERE rt.product_id = p.id AND rt.status = 'APPROVED')";
 
 // Cột dùng chung cho mọi danh sách sản phẩm (cửa hàng, yêu thích, liên quan)
-const LIST_COLUMNS = `p.id, p.name, p.slug, p.base_price, p.status, p.category_id, p.brand_id, p.created_at,
+const LIST_COLUMNS = `p.id, p.name, p.slug, p.base_price, p.status, p.category_id, p.brand_id, p.created_at, p.outfit_role,
+       (CASE WHEN p.group_buy_enabled = 1 THEN (SELECT MAX(gt.discount_percent) FROM product_group_tiers gt WHERE gt.product_id = p.id) END) AS group_max_percent,
        c.name AS category_name, b.name AS brand_name,
        (SELECT MIN(price) FROM product_variants WHERE product_id = p.id AND is_active = 1) AS min_price,
        (SELECT v.compare_at_price FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1
@@ -54,7 +57,7 @@ const marks = (list) => list.map(() => '?').join(',');
 
 // Danh sách sản phẩm có lọc + sắp xếp + phân trang. onlyActive = true cho khách hàng.
 // Bộ lọc: q, category_id, brand_id (nhiều giá trị cách nhau dấu phẩy), min_price, max_price,
-//         size_id, color_id (nhiều giá trị), in_stock=1, on_sale=1. size/color/còn hàng phải cùng khớp MỘT biến thể đang bán.
+//         size_id, color_id (nhiều giá trị), in_stock=1, on_sale=1. size/color/còn hàng phải cùng khớp MỘT mẫu mã đang bán.
 async function listProducts(q, onlyActive) {
   const { page, limit, offset } = paging(q);
   const sort = q.sort === undefined || q.sort === '' ? 'newest' : String(q.sort);
@@ -85,7 +88,7 @@ async function listProducts(q, onlyActive) {
     if (inStock) cond.push('COALESCE(i.quantity, 0) > 0');
     where.push(`EXISTS (SELECT 1 FROM product_variants v LEFT JOIN inventories i ON i.variant_id = v.id WHERE ${cond.join(' AND ')})`);
   }
-  // on_sale=1: có biến thể đang bán với giá gốc cao hơn giá bán (cùng điều kiện hiện nhãn giảm giá trong app)
+  // on_sale=1: có mẫu mã đang bán với giá gốc cao hơn giá bán (cùng điều kiện hiện nhãn giảm giá trong app)
   if (q.on_sale === '1' || q.on_sale === 'true') {
     where.push('EXISTS (SELECT 1 FROM product_variants sv WHERE sv.product_id = p.id AND sv.is_active = 1 AND sv.compare_at_price > sv.price)');
   }
@@ -161,7 +164,32 @@ async function getProduct(id, onlyActive) {
   variants.sort((a, b) => rank.get(a.size_id) - rank.get(b.size_id) || a.color_id - b.color_id);
   const [images] = await db.query(
     'SELECT * FROM product_images WHERE product_id = ? ORDER BY is_primary DESC, sort_order, id', [id]);
-  return { ...rows[0], variants: variants.map(({ size_sort, ...v }) => v), images };
+  // Mua nhóm: khách chỉ thấy khi đã bật và có bậc giá (group_buy = null nếu không); CMS luôn thấy cấu hình đầy đủ
+  const cfg = await getGroupConfig(db, id);
+  const groupBuy = onlyActive ? (cfg.enabled ? { hours: cfg.hours, tiers: cfg.tiers } : null) : cfg;
+  // styles / occasions (thẻ Stylist) lưu dạng "A,B" trong database, trả ra dạng mảng cho dễ dùng
+  return {
+    ...rows[0], styles: splitTags(rows[0].styles), occasions: splitTags(rows[0].occasions),
+    variants: variants.map(({ size_sort, ...v }) => v), images, group_buy: groupBuy,
+  };
 }
 
-module.exports = { listProducts, getProduct, suggestProducts, relatedProducts, LIST_COLUMNS };
+// Ứng viên cho Stylist: sản phẩm ĐANG BÁN đã gắn vai trò, kèm các mẫu mã còn hàng (cửa hàng chỉ bán đồ nam nên không lọc giới tính).
+// Chỉ đọc. Việc chọn bộ đồ nằm ở services/stylist.js (không đụng database).
+async function listOutfitCandidates() {
+  const [products] = await db.query(
+    `SELECT ${LIST_COLUMNS}, p.styles, p.occasions, ${SOLD} AS sold_count
+     ${LIST_FROM}
+     WHERE p.status = 'ACTIVE' AND p.outfit_role IS NOT NULL`);
+  if (!products.length) return { products, variants: [] };
+  const ids = products.map((p) => p.id);
+  const [variants] = await db.query(
+    `SELECT v.id, v.product_id, v.price, v.compare_at_price, s.name AS size_name, c.name AS color_name, c.hex_code, i.quantity AS stock
+     FROM product_variants v
+     JOIN sizes s ON s.id = v.size_id JOIN colors c ON c.id = v.color_id
+     JOIN inventories i ON i.variant_id = v.id
+     WHERE v.is_active = 1 AND i.quantity > 0 AND v.product_id IN (${marks(ids)})`, ids);
+  return { products, variants };
+}
+
+module.exports = { listProducts, getProduct, suggestProducts, relatedProducts, listOutfitCandidates, LIST_COLUMNS };

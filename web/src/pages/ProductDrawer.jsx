@@ -1,12 +1,16 @@
-// Thêm/sửa sản phẩm. Tab 1: thông tin chung. Tab 2: biến thể (size/màu/SKU/giá) và tồn kho.
+// Thêm/sửa sản phẩm. Tab 1: thông tin chung. Tab 2: mẫu mã (size/màu/SKU/giá) và tồn kho.
 import { useEffect, useState } from 'react';
 import {
   App, Button, Drawer, Form, Image, Input, InputNumber, Modal, Radio, Select, Space, Switch, Table,
   Tabs, Tag, Upload,
 } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import api, { errMsg } from '../api';
-import { money, PRODUCT_STATUS, validate } from '../utils';
+import { groupPrice, money, PRODUCT_STATUS, validate } from '../utils';
+
+// Mua nhóm chưa cấu hình; bật lần đầu thì điền sẵn 2 bậc theo ví dụ: 3 người giảm 10%, 5 người giảm 20%
+const DEFAULT_GROUP = { enabled: false, hours: 48, tiers: [] };
+const EXAMPLE_TIERS = [{ min_members: 3, discount_percent: 10 }, { min_members: 5, discount_percent: 20 }];
 
 const normalizeSkuPart = (value) => String(value)
   .normalize('NFD')
@@ -25,12 +29,15 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   const { message } = App.useApp();
   const [id, setId] = useState(null);
   const [product, setProduct] = useState(null);
-  const [meta, setMeta] = useState({ categories: [], brands: [], sizes: [], colors: [] });
+  const [meta, setMeta] = useState({ categories: [], brands: [], sizes: [], colors: [], stylist: null });
   const [tab, setTab] = useState('info');
   const [imageList, setImageList] = useState([]);
+  const [groupCfg, setGroupCfg] = useState(DEFAULT_GROUP);
+  const [groupSaving, setGroupSaving] = useState(false);
   const [externalImage, setExternalImage] = useState('');
   const [previewImage, setPreviewImage] = useState('');
   const [infoForm] = Form.useForm();
+  const basePrice = Form.useWatch('base_price', infoForm);
   const [variantForm] = Form.useForm();
   const [stockForm] = Form.useForm();
   const [variantModal, setVariantModal] = useState(null); // null | {} (thêm) | variant (sửa)
@@ -43,6 +50,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
     const p = (await api.get(`/admin/products/${pid}`)).data;
     setProduct(p);
     infoForm.setFieldsValue(p);
+    setGroupCfg(p.group_buy ? { enabled: !!p.group_buy.enabled, hours: p.group_buy.hours ?? 48, tiers: p.group_buy.tiers ?? [] } : DEFAULT_GROUP);
     setImageList(p.images.map((image) => ({
       uid: String(image.id),
       name: image.image_url.split('/').pop() || 'Ảnh sản phẩm',
@@ -58,14 +66,17 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
     setId(productId);
     setProduct(null);
     setImageList([]);
+    setGroupCfg(DEFAULT_GROUP);
     setExternalImage('');
     infoForm.resetFields();
-    infoForm.setFieldsValue({ status: 'DRAFT', base_price: 0 });
+    infoForm.setFieldsValue({ status: 'DRAFT', base_price: 0, styles: [], occasions: [] });
     (async () => {
       try {
         const [categories, brands, sizes, colors] = await Promise.all(
           ['categories', 'brands', 'sizes', 'colors'].map((k) => api.get(`/admin/${k}`).then((r) => r.data)));
-        setMeta({ categories, brands, sizes, colors });
+        // Lựa chọn của Stylist: lỗi thì chỉ ẩn mục gắn thẻ, không làm hỏng ngăn sản phẩm
+        const stylist = await api.get('/stylist/options').then((r) => r.data).catch(() => null);
+        setMeta({ categories, brands, sizes, colors, stylist });
         if (productId) await loadProduct(productId);
       } catch (e) { message.error(errMsg(e)); }
     })();
@@ -93,6 +104,15 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
       .filter((image) => image.status === 'done')
       .map((image) => image.response?.url || image.url)
       .filter(Boolean);
+    // Ô xóa trống trả về undefined (bị bỏ khỏi JSON): gửi null / mảng rỗng để backend thật sự xóa thẻ.
+    // Mục gắn thẻ đang ẩn (không tải được lựa chọn) thì KHÔNG gửi gì để khỏi xóa nhầm thẻ đã có.
+    if (meta.stylist) {
+      values.outfit_role = values.outfit_role ?? null;
+      values.styles = values.styles ?? [];
+      values.occasions = values.occasions ?? [];
+    } else {
+      delete values.outfit_role; delete values.styles; delete values.occasions;
+    }
     try {
       if (id) {
         await api.put(`/admin/products/${id}`, values);
@@ -103,11 +123,23 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
         setId(res.data.id);
         await loadProduct(res.data.id);
         setTab('variants');
-        message.success('Đã tạo sản phẩm. Hãy thêm các biến thể (size/màu) ở tab này');
+        message.success('Đã tạo sản phẩm. Hãy thêm các mẫu mã (size/màu) ở tab này');
       }
       onChanged();
     } catch (e) { message.error(errMsg(e)); }
   };
+
+  // Mua nhóm lưu riêng (PUT /admin/products/:id/group-buy), không đi cùng nút "Lưu thay đổi" của thông tin chung
+  const saveGroup = async () => {
+    setGroupSaving(true);
+    try {
+      const res = await api.put(`/admin/products/${id}/group-buy`, { enabled: groupCfg.enabled, hours: groupCfg.hours, tiers: groupCfg.tiers });
+      setGroupCfg({ enabled: res.data.enabled, hours: res.data.hours, tiers: res.data.tiers });
+      message.success(res.data.enabled ? 'Đã lưu: sản phẩm này đang mở mua nhóm' : 'Đã lưu: tắt mua nhóm cho sản phẩm này');
+      onChanged();
+    } catch (e) { message.error(errMsg(e)); } finally { setGroupSaving(false); }
+  };
+  const setTier = (index, patch) => setGroupCfg((cfg) => ({ ...cfg, tiers: cfg.tiers.map((t, i) => (i === index ? { ...t, ...patch } : t)) }));
 
   const saveVariant = async () => {
     const values = await validate(variantForm);
@@ -115,7 +147,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
     try {
       if (variantModal.id) await api.put(`/admin/products/variants/${variantModal.id}`, values);
       else await api.post(`/admin/products/${id}/variants`, values);
-      message.success('Đã lưu biến thể');
+      message.success('Đã lưu mẫu mã');
       setVariantModal(null);
       await loadProduct(id);
       onChanged();
@@ -155,7 +187,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
     if (!values) return;
     const count = values.size_ids.length * values.color_ids.length;
     if (count > 100) {
-      message.error('Mỗi lần chỉ có thể tạo tối đa 100 biến thể.');
+      message.error('Mỗi lần chỉ có thể tạo tối đa 100 mẫu mã.');
       return;
     }
     const sizes = new Map(meta.sizes.map((size) => [size.id, size]));
@@ -175,7 +207,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   const saveQuickVariants = async () => {
     const skus = quickVariants.map((variant) => variant.sku.trim());
     if (!skus.length || skus.some((sku) => !sku)) {
-      message.error('Vui lòng tạo biến thể và nhập đầy đủ SKU.');
+      message.error('Vui lòng tạo mẫu mã và nhập đầy đủ SKU.');
       return;
     }
     if (new Set(skus.map((sku) => sku.toUpperCase())).size !== skus.length) {
@@ -192,12 +224,12 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
           quantity: variant.quantity,
         })),
       });
-      message.success(`Đã tạo ${quickVariants.length} biến thể`);
+      message.success(`Đã tạo ${quickVariants.length} mẫu mã`);
       setQuickModal(false);
       await loadProduct(id);
       onChanged();
     } catch (e) {
-      message.error(`Không tạo được biến thể: ${errMsg(e)}`);
+      message.error(`Không tạo được mẫu mã: ${errMsg(e)}`);
     }
   };
 
@@ -254,6 +286,82 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
         </Form.Item>
       </div>
       <Form.Item name="description" label="Mô tả"><Input.TextArea rows={4} /></Form.Item>
+      {meta.stylist && (
+        <div className="stylist-box">
+          <div className="stylist-title">Gợi ý bộ đồ (Stylist)</div>
+          <div className="stylist-help">
+            Gắn thẻ để app đưa sản phẩm này vào các bộ đồ gợi ý cho khách. Sản phẩm chưa chọn &quot;Vai trò&quot; sẽ không xuất hiện trong gợi ý.
+          </div>
+          <div className="form-grid-3">
+            <Form.Item name="outfit_role" label="Vai trò trong bộ đồ">
+              <Select allowClear placeholder="Chưa gắn thẻ (không phối đồ)" style={{ width: '100%' }}
+                options={meta.stylist.roles.map((r) => ({ value: r.value, label: r.label }))} />
+            </Form.Item>
+            <Form.Item name="styles" label="Phong cách (trống = hợp mọi phong cách)">
+              <Select mode="multiple" allowClear style={{ width: '100%' }} placeholder="Chọn một hoặc nhiều"
+                options={meta.stylist.styles.map((s) => ({ value: s.value, label: s.label }))} />
+            </Form.Item>
+            <Form.Item name="occasions" label="Hoàn cảnh (trống = hợp mọi hoàn cảnh)">
+              <Select mode="multiple" allowClear style={{ width: '100%' }} placeholder="Chọn một hoặc nhiều"
+                options={meta.stylist.occasions.map((o) => ({ value: o.value, label: o.label }))} />
+            </Form.Item>
+          </div>
+        </div>
+      )}
+      <div className="stylist-box group-box">
+        <div className="stylist-title">Mua nhóm</div>
+        <div className="stylist-help">
+          Khách tạo nhóm và mời bạn bè; đủ số người thì mỗi người trong nhóm được giảm theo bậc cao nhất đạt được. Khách chỉ trả tiền khi
+          nhóm chốt thành công và bấm mua (không thu trước).
+        </div>
+        {!id ? (
+          <div className="stylist-help">Hãy lưu sản phẩm trước, rồi mở lại để cấu hình mua nhóm.</div>
+        ) : (
+          <>
+            <Space align="center" wrap style={{ marginBottom: 12 }}>
+              <Switch
+                checked={groupCfg.enabled}
+                aria-label="Cho phép mua nhóm"
+                onChange={(enabled) => setGroupCfg((cfg) => ({ ...cfg, enabled, tiers: enabled && !cfg.tiers.length ? EXAMPLE_TIERS : cfg.tiers }))}
+              />
+              <span>Cho phép mua nhóm</span>
+              <span className="stylist-help" style={{ margin: 0 }}>· thời gian rủ bạn</span>
+              <InputNumber min={1} max={720} precision={0} value={groupCfg.hours} aria-label="Thời gian rủ bạn (giờ)"
+                onChange={(hours) => setGroupCfg((cfg) => ({ ...cfg, hours }))} style={{ width: 90 }} />
+              <span>giờ</span>
+            </Space>
+            {groupCfg.enabled && (
+              <div className="group-tiers">
+                {groupCfg.tiers.map((t, i) => (
+                  <div className="group-tier-row" key={i}>
+                    <span>Đủ</span>
+                    <InputNumber min={2} max={50} precision={0} value={t.min_members} style={{ width: 70 }} aria-label={`Số người bậc ${i + 1}`}
+                      onChange={(v) => setTier(i, { min_members: v })} />
+                    <span>người, giảm</span>
+                    <InputNumber min={1} max={80} value={t.discount_percent} style={{ width: 80 }} aria-label={`Phần trăm giảm bậc ${i + 1}`}
+                      onChange={(v) => setTier(i, { discount_percent: v })} />
+                    <span>%</span>
+                    {Number(basePrice) > 0 && Number(t.discount_percent) > 0 && (
+                      <span className="stylist-help" style={{ margin: 0 }}>
+                        = {money(groupPrice(basePrice, t.discount_percent))} / người (giá gốc {money(basePrice)})
+                      </span>
+                    )}
+                    <Button type="text" danger icon={<DeleteOutlined />} aria-label={`Xóa bậc ${i + 1}`}
+                      onClick={() => setGroupCfg((cfg) => ({ ...cfg, tiers: cfg.tiers.filter((_, j) => j !== i) }))} />
+                  </div>
+                ))}
+                <Button size="small" icon={<PlusOutlined />} disabled={groupCfg.tiers.length >= 5}
+                  onClick={() => setGroupCfg((cfg) => ({ ...cfg, tiers: [...cfg.tiers, { min_members: (cfg.tiers.at(-1)?.min_members ?? 1) + 2, discount_percent: Math.min((cfg.tiers.at(-1)?.discount_percent ?? 0) + 10, 80) }] }))}>
+                  Thêm bậc
+                </Button>
+              </div>
+            )}
+            <div style={{ margin: '12px 0 14px' }}>
+              <Button type="primary" ghost loading={groupSaving} onClick={saveGroup}>Lưu mua nhóm</Button>
+            </div>
+          </>
+        )}
+      </div>
       <Form.Item label="Ảnh sản phẩm (ảnh đầu tiên là ảnh chính)">
         <Upload
           accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
@@ -305,8 +413,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
   const variantsTab = (
     <>
       <Space style={{ marginBottom: 12 }} wrap>
-        <Button type="primary" onClick={() => openVariant()}>Thêm biến thể</Button>
-        <Button onClick={openQuickCreate}>Tạo nhanh nhiều biến thể</Button>
+        <Button type="primary" onClick={() => openVariant()}>Thêm mẫu mã</Button>
+        <Button onClick={openQuickCreate}>Tạo nhanh nhiều mẫu mã</Button>
       </Space>
       <Table rowKey="id" size="small" pagination={false} dataSource={product?.variants || []}
         columns={[
@@ -346,10 +454,10 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
       ) : null}>
       <Tabs activeKey={tab} onChange={setTab} items={[
         { key: 'info', label: 'Thông tin', children: infoTab },
-        { key: 'variants', label: 'Biến thể & kho', disabled: !id, children: variantsTab },
+        { key: 'variants', label: 'Mẫu mã & kho', disabled: !id, children: variantsTab },
       ]} />
 
-      <Modal open={!!variantModal} title={variantModal?.id ? 'Sửa biến thể' : 'Thêm biến thể'}
+      <Modal open={!!variantModal} title={variantModal?.id ? 'Sửa mẫu mã' : 'Thêm mẫu mã'}
         okText="Lưu" cancelText="Hủy" onOk={saveVariant} onCancel={() => setVariantModal(null)} destroyOnHidden>
         <Form form={variantForm} layout="vertical">
           {!variantModal?.id && (
@@ -381,8 +489,8 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
 
       <Modal
         open={quickModal}
-        title="Tạo nhanh nhiều biến thể"
-        okText={`Tạo ${quickVariants.length} biến thể`}
+        title="Tạo nhanh nhiều mẫu mã"
+        okText={`Tạo ${quickVariants.length} mẫu mã`}
         cancelText="Hủy"
         okButtonProps={{ disabled: !quickVariants.length }}
         onOk={saveQuickVariants}
@@ -409,7 +517,7 @@ export default function ProductDrawer({ open, productId, onClose, onChanged }) {
             <Form.Item name="price" label="Giá chung (₫)" rules={[{ required: true, message: 'Nhập giá bán' }]}>
               <InputNumber min={0} step={1000} style={{ width: 180 }} />
             </Form.Item>
-            <Form.Item name="quantity" label="Số lượng ban đầu cho mỗi biến thể"
+            <Form.Item name="quantity" label="Số lượng ban đầu cho mỗi mẫu mã"
               rules={[{ required: true, message: 'Nhập số lượng ban đầu' }]}>
               <InputNumber min={0} precision={0} style={{ width: 240 }} />
             </Form.Item>

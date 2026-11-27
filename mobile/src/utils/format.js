@@ -1,10 +1,11 @@
 import { API_ORIGIN } from './config';
 
-// 1250000 -> "1.250.000 ₫" (tự định dạng, không phụ thuộc Intl của thiết bị)
+// 1250000 -> "1.250.000 ₫" (tự định dạng, không phụ thuộc Intl của thiết bị).
+// Giữa số và ₫ là dấu cách không ngắt (U+00A0), nhìn y hệt dấu cách thường nhưng chữ ₫ không bao giờ bị đẩy xuống dòng riêng.
 export function money(n) {
   const v = Math.round(Number(n) || 0);
   const digits = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${v < 0 ? '-' : ''}${digits} ₫`;
+  return `${v < 0 ? '-' : ''}${digits} ₫`;
 }
 
 export const dateTime = (d) => {

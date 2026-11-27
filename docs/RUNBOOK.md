@@ -157,7 +157,7 @@ SELECT user_type, status, COUNT(*) AS n FROM users GROUP BY user_type, status;
 SELECT id, order_code, user_id, status, payment_status, total_amount, created_at FROM orders ORDER BY id DESC LIMIT 20;
 SELECT status, COUNT(*) AS n FROM orders GROUP BY status;
 
--- Tồn kho thấp nhất theo biến thể
+-- Tồn kho thấp nhất theo mẫu mã
 SELECT p.name, v.sku, s.name AS size_name, c.name AS color_name, COALESCE(i.quantity, 0) AS stock
 FROM product_variants v
 JOIN products p ON p.id = v.product_id
@@ -227,16 +227,35 @@ Từ 2026-11-24 mọi thay đổi cấu trúc nằm ở đây (không sửa `sch
 |---|---|
 | `001_payment_shipping.sql` | `orders.payment_expires_at`; bảng `bank_transactions`, `shipping_zones` (kèm vùng mặc định "Toàn quốc" 30.000 ₫, miễn phí từ 500.000 ₫, 2-5 ngày), `shipment_events` |
 | `002_banners.sql` | bảng `banners` |
+| `003_outfit_stylist.sql` | 4 cột mới của `products` cho Stylist (gợi ý bộ đồ): `gender` (mặc định `UNISEX`, hiện KHÔNG dùng vì cửa hàng chỉ bán đồ nam), `outfit_role` (NULL = chưa gắn thẻ), `styles`, `occasions`. Sản phẩm cũ giữ nguyên, chưa xuất hiện trong gợi ý bộ đồ cho tới khi gắn thẻ |
+| `004_group_buy.sql` | Mua nhóm: bảng `product_group_tiers`, `buy_groups`, `buy_group_members` + 2 cột của `products` (`group_buy_enabled` mặc định 0, `group_buy_hours` mặc định 48). Mọi sản phẩm cũ chưa mở mua nhóm cho tới khi bật ở CMS |
+| `005_gift_orders.sql` | Đơn quà tặng: bảng `order_gifts` (thiệp, người ký, ẩn giá, gói quà gắn với một đơn; xóa đơn thì xóa theo). Không đổi bảng cũ; đơn cũ không có dòng nào |
 
 **Áp dụng lên database đang có dữ liệu** (ví dụ `clothing_store`):
 1. Sao lưu trước: `cmd /c "mysqldump -u <DB_USER> -p clothing_store > backup-truoc-migration.sql"` (PowerShell không có toán tử `<` nên bọc `cmd /c`; nếu không có `mysqldump` trong PATH thì dùng MySQL Workbench: Server > Data Export).
-2. Chạy từng file: `cmd /c "mysql -u <DB_USER> -p clothing_store < database\migrations\001_payment_shipping.sql"` rồi `002_banners.sql`. Hoặc trong MySQL Workbench: chọn schema `clothing_store` làm mặc định (nháy đúp), File > Open SQL Script, chọn file, chạy.
-3. Kiểm tra: `SHOW TABLES;` có `bank_transactions`, `shipping_zones`, `shipment_events`, `banners`; `SELECT * FROM shipping_zones;` có 1 dòng mặc định.
+2. Chạy từng file: `cmd /c "mysql -u <DB_USER> -p clothing_store < database\migrations\001_payment_shipping.sql"` rồi `002_banners.sql`, `003_outfit_stylist.sql` (chỉ chạy các file CHƯA chạy; database đã có 001-003 thì chỉ chạy `004_group_buy.sql` và `005_gift_orders.sql`; đã có 001-004 thì chỉ chạy `005_gift_orders.sql`). Hoặc trong MySQL Workbench: chọn schema `clothing_store` làm mặc định (nháy đúp), File > Open SQL Script, chọn file, chạy.
+3. Kiểm tra: `SHOW TABLES;` có `bank_transactions`, `shipping_zones`, `shipment_events`, `banners`; `SELECT * FROM shipping_zones;` có 1 dòng mặc định; `DESCRIBE products;` có `gender`, `outfit_role`, `styles`, `occasions`, `group_buy_enabled`, `group_buy_hours`; `SHOW TABLES;` có `product_group_tiers`, `buy_groups`, `buy_group_members`, `order_gifts`.
 4. Khởi động lại backend (hết báo thiếu migration).
 
 Docker Compose: volume MỚI tự chạy các migration (xem `docker-compose.yml`); volume ĐÃ có dữ liệu thì áp dụng tay: `docker compose exec -T db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" clothing_store' < database/migrations/001_payment_shipping.sql` (chạy trong cmd hoặc Git Bash, không phải PowerShell). Đã thử: Docker volume mới tự có đủ bảng, vùng mặc định và dữ liệu tiếng Việt đúng (UTF-8); **chưa thử** áp dụng tay lên volume cũ.
 
 Làm thử trên database tạm (không đụng dữ liệu thật): dựng từ `schema.sql` đã đổi tên database (hoặc tạo DB rỗng + chạy `schema.sql` đổi tên), chạy hai migration, trỏ backend bằng `DB_NAME` trong môi trường.
+
+### 8.1 Sau migration 003: gắn thẻ để Stylist có sản phẩm để phối
+Stylist (gợi ý bộ đồ) CHỈ dùng sản phẩm đã gắn thẻ; sau migration mọi sản phẩm cũ đều chưa có thẻ nên app báo "Chưa đủ sản phẩm để phối bộ này". Vào CMS > Sản phẩm > mở từng sản phẩm > mục **Gợi ý bộ đồ (Stylist)**: chọn **Vai trò** (Áo, Quần, Giày, Phụ kiện, Áo khoác), **Phong cách** và **Hoàn cảnh** (nhiều lựa chọn; để trống = hợp mọi thứ) rồi Lưu. Cột **Phối đồ** ở danh sách cho biết sản phẩm nào còn "Chưa gắn thẻ". Muốn có bộ đủ giày/phụ kiện trong ngân sách thấp cần có sản phẩm giá thấp thuộc các vai trò đó. Kiểm tra nhanh bằng SQL: `SELECT outfit_role, COUNT(*) FROM products WHERE status = 'ACTIVE' GROUP BY outfit_role;`.
+
+Kiểm thử bộ máy Stylist (không cần database): `cd backend` rồi `npm test` (Node >= 18; dùng bộ chạy test có sẵn của Node, không cài thêm gì).
+
+### 8.2 Sau migration 004: bật mua nhóm
+CMS > Sản phẩm > mở sản phẩm > mục **Mua nhóm**: bật công tắc, chọn thời gian rủ bạn (giờ) và các bậc (ví dụ 3 người giảm 10%, 5 người giảm 20%; bấm bật lần đầu thì điền sẵn đúng ví dụ này), bấm **Lưu mua nhóm** (nút riêng, không đi cùng "Lưu thay đổi"). Sản phẩm có nhãn "Mua nhóm giảm đến N%" ở app. Trang **Mua nhóm** ở menu CMS liệt kê các nhóm khách đã tạo (lọc theo trạng thái, hủy nhóm đang mở).
+Link mời gửi cho bạn bè là `PUBLIC_URL` + `/g/<mã>` (trang web có nút mở app). Mặc định `PUBLIC_URL` là `http://localhost:3000` nên bạn bè KHÔNG mở được: muốn dùng thật phải đặt `PUBLIC_URL` trong `backend/.env` thành địa chỉ họ truy cập được (xem mục 3 khi đổi mạng; chưa có tên miền thì dùng IP LAN cho thử trong nhà). Dù link không mở được, lời mời vẫn có **mã nhóm** để nhập tay trong app. Mở bằng link `hfarm://` chỉ chạy khi đã cài app bản build (Expo Go dùng scheme khác).
+Kiểm tra nhanh bằng SQL (chỉ SELECT): `SELECT code, status, final_members, final_percent, expires_at, claim_until FROM buy_groups ORDER BY id DESC LIMIT 20;`
+
+### 8.3 Sau migration 005: bật quà tặng (gói quà + chuyển khoản)
+Quà tặng chạy được ngay sau migration (app: ô "Tặng quà cho anh ấy" ở Trang chủ), nhưng muốn đủ tính năng cần 2 việc:
+1. **Chuyển khoản phải bật** (`BANK_BIN`, `BANK_ACCOUNT_NO`, `BANK_ACCOUNT_NAME` trong `backend/.env`, xem ARCHITECTURE mục 4): đơn quà chỉ thanh toán chuyển khoản (COD bị chặn ở backend), chưa bật thì app báo "Cửa hàng chưa bật chuyển khoản nên chưa nhận được đơn quà".
+2. **Tạo sản phẩm "Gói quà"** (không bắt buộc, không có thì app ẩn công tắc gói quà): CMS > Sản phẩm > thêm sản phẩm tên "Gói quà", một mẫu mã (ví dụ Free size), giá (ví dụ 20.000 ₫), nhập tồn kho, **không gắn vai trò Stylist**; rồi đặt `GIFT_WRAP_SKU=<SKU của mẫu mã đó>` trong `backend/.env` và khởi động lại backend. Sản phẩm này cũng hiện trong cửa hàng của app, nên đặt vào một danh mục riêng nếu không muốn khách thấy nó lẫn với quần áo.
+Gợi ý quà dùng sản phẩm ĐÃ gắn thẻ Stylist (mục 8.1): chưa gắn thẻ thì màn Quà tặng báo "Chưa có món nào hợp". Nhân viên xử lý đơn quà ở CMS > Đơn hàng: lọc "Đơn quà tặng" hoặc "Đơn quà cần gói hộp"; mở chi tiết để **In thiệp** (A6, nhớ bật "Đồ họa nền" nếu trình duyệt không tự in màu nền) và **In phiếu giao hàng** (đơn ẩn giá thì phiếu không có giá), bỏ cả hai vào hộp. Kiểm tra nhanh bằng SQL (chỉ SELECT): `SELECT order_id, occasion, card_template, hide_prices, wrap, created_at FROM order_gifts ORDER BY created_at DESC LIMIT 20;`
 
 ## 9. Thanh toán QR, webhook và giao hàng
 

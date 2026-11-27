@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { App, Button, Card, Empty, Input, Select, Space, Table, Tag, Tooltip, Typography } from 'antd';
 import { CheckCircleOutlined, EditOutlined, PauseCircleOutlined, PictureOutlined, PlusOutlined, StarFilled } from '@ant-design/icons';
 import api, { errMsg } from '../api';
-import { money, PRODUCT_STATUS } from '../utils';
+import { money, OUTFIT_ROLES, PRODUCT_STATUS } from '../utils';
 import ProductDrawer from './ProductDrawer.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import ConfirmButton from '../components/ConfirmButton.jsx';
@@ -86,6 +86,13 @@ export default function Products() {
     },
     { title: 'Tồn kho', dataIndex: 'total_stock', width: 130, render: (v) => <StockTag value={v} /> },
     {
+      // Stylist chỉ phối những sản phẩm đã gắn vai trò: cho nhân viên thấy sản phẩm nào còn thiếu thẻ
+      title: 'Phối đồ', dataIndex: 'outfit_role', width: 130,
+      render: (role) => (role
+        ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>{OUTFIT_ROLES[role] ?? role}</Tag>
+        : <Tooltip title="Chưa gắn thẻ nên chưa xuất hiện trong gợi ý bộ đồ. Mở sản phẩm, mục Gợi ý bộ đồ (Stylist)."><Tag style={{ marginInlineEnd: 0 }}>Chưa gắn thẻ</Tag></Tooltip>),
+    },
+    {
       title: 'Đánh giá', dataIndex: 'rating_avg', width: 130,
       render: (v, r) => (Number(r.rating_count) > 0
         ? <span><StarFilled className="rating-star" /> {Number(v).toFixed(1)} <span className="cell-sub-inline">({r.rating_count})</span></span>
@@ -120,7 +127,7 @@ export default function Products() {
 
   return (
     <>
-      <PageHeader title="Sản phẩm" description="Quản lý thông tin, biến thể và trạng thái kinh doanh."
+      <PageHeader title="Sản phẩm" description="Quản lý thông tin, mẫu mã và trạng thái kinh doanh."
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawer({ open: true, id: null })}>Thêm sản phẩm</Button>} />
 
       <Card className="surface-card">

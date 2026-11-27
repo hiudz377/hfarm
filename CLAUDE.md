@@ -1,6 +1,6 @@
 # HFarm
 
-Hệ thống quản lý + bán quần áo: **backend** Node/Express + MySQL, **web CMS** (React + Ant Design) cho admin/staff, **app mobile** (Expo) cho khách hàng.
+Hệ thống quản lý + bán quần áo **nam** (cửa hàng CHỈ bán đồ nam: giao diện không có chọn giới tính, váy, đầm): **backend** Node/Express + MySQL, **web CMS** (React + Ant Design) cho admin/staff, **app mobile** (Expo) cho khách hàng.
 Đăng nhập bằng Keycloak (realm `hfarm`); có chế độ dev không cần Keycloak. Giao diện và thông báo lỗi bằng tiếng Việt có dấu.
 Đường dẫn dự án có dấu cách (`...\HTBanQA (1)\HTBanQA`): luôn bọc `"..."` khi `cd`. Máy dùng Windows + PowerShell.
 
@@ -29,11 +29,11 @@ Hệ thống quản lý + bán quần áo: **backend** Node/Express + MySQL, **w
 - Đăng ký/đăng nhập ngay trong app: `POST /api/auth/register` (backend dùng client `hfarm-backend` gọi Keycloak Admin API) + password grant (cần Direct access grants cho `hfarm-mobile`, bật bằng `npm run setup:keycloak`). Rủi ro: ARCHITECTURE mục 7.
 
 ## Quy tắc khi sửa code
-1. **Không sửa `database/schema.sql`.** Cần đổi cấu trúc thì tạo file mới trong `database/migrations/` (đã có `001`, `002`; đánh số tiếp, chỉ thêm, chạy một lần), thêm vào `backend/src/migrations.js` (kiểm tra khi khởi động) và `docker-compose.yml`, nói rõ cách áp dụng (`docs/RUNBOOK.md` mục 8).
-2. **Không đổi logic đặt hàng / trừ kho / hoàn kho** ở `backend/src/services/orders.js` và `backend/src/services/stock.js` trừ khi có lỗi thật; khi đó phải nói rõ sửa gì và vì sao.
+1. **Không sửa `database/schema.sql`.** Cần đổi cấu trúc thì tạo file mới trong `database/migrations/` (đã có `001` đến `005`; đánh số tiếp, chỉ thêm, chạy một lần), thêm vào `backend/src/migrations.js` (kiểm tra khi khởi động) và `docker-compose.yml`, nói rõ cách áp dụng (`docs/RUNBOOK.md` mục 8).
+2. **Không đổi logic đặt hàng / trừ kho / hoàn kho** (NGOẠI LỆ đã được chủ dự án đồng ý 2026-11-26: một đoạn nhỏ tính giảm giá nhóm trong `quoteOrder` / `createOrder`, xem `docs/ARCHITECTURE.md` mục 4; phần khóa giỏ, trừ kho, hoàn kho vẫn KHÔNG được đổi) ở `backend/src/services/orders.js` và `backend/src/services/stock.js` trừ khi có lỗi thật; khi đó phải nói rõ sửa gì và vì sao.
 3. **Mọi route admin phải đi qua middleware role ở backend** (`requireRole`), không chỉ ẩn ở giao diện. Route mới -> cập nhật bảng phân quyền trong `docs/ARCHITECTURE.md` và `docs/API.md`.
 4. **SQL luôn dùng tham số `?`**; không ghép chuỗi người dùng vào SQL (cột sắp xếp chỉ lấy từ danh sách cố định như `SORTS`).
-5. Giao diện tiếng Việt **có dấu**; tiền dạng `1.250.000 ₫` (web: `money()` trong `web/src/utils.js`; mobile: `money()` trong `mobile/src/utils/format.js`).
+5. Giao diện tiếng Việt **có dấu**; tiền dạng `1.250.000 ₫` (web: `money()` trong `web/src/utils.js`; mobile: `money()` trong `mobile/src/utils/format.js`). Chữ hiển thị và docs gọi size x màu x SKU là **"mẫu mã"**, không dùng "biến thể"/"phiên bản"; tên trong code/API/DB vẫn là `variant` (không đổi).
 6. **Không ghi secret** (mật khẩu, token, client secret, nội dung `.env`, email/IP thật) vào code, README hay docs. Kho GitHub là PUBLIC. Chỉ ghi TÊN biến + giá trị mẫu giả.
 7. **Không chạy lệnh phá hủy khi chưa hỏi**: `docker rm`/`volume rm`, `DROP`, chạy lại `schema.sql`, `npm run setup:keycloak`, `docker compose down -v`, `git reset --hard`...
 8. Báo cáo cuối **tối đa 15 dòng**, nói thẳng phần nào **đã kiểm tra thật** (chạy gì, trên đâu) và phần nào **chưa** (điện thoại thật, Keycloak thật...).
@@ -43,9 +43,9 @@ Mobile (Expo; bản đầy đủ `mobile/AGENTS.md`): Expo đổi API mỗi SDK,
 Mọi `EXPO_PUBLIC_*`, `VITE_*` đều nhúng vào bản build nên không đặt bí mật; đổi xong phải restart/`--clear`/build lại.
 
 ## Tình trạng (chi tiết: `docs/STATUS.md`)
-- Xong: backend đầy đủ (catalog, giỏ, đặt hàng an toàn đồng thời, đơn hàng + hoàn kho, đánh giá, yêu thích, CMS), web CMS 12 trang, app mobile đủ luồng mua hàng (trang chủ có banner, thanh toán QR VietQR, phí ship theo vùng, theo dõi đơn), đăng nhập/đăng ký trong app, Docker Compose.
+- Xong: backend đầy đủ (catalog, giỏ, đặt hàng an toàn đồng thời, đơn hàng + hoàn kho, đánh giá, yêu thích, CMS), web CMS 12 trang, app mobile đủ luồng mua hàng (trang chủ có banner, thanh toán QR VietQR, phí ship theo vùng, theo dõi đơn), đăng nhập/đăng ký trong app, Docker Compose, **Stylist** (app gợi ý cả bộ đồ theo số đo/phong cách/hoàn cảnh/ngân sách; bộ máy chấm điểm trên server `backend/src/services/stylist.js`, KHÔNG phải LLM; cần chạy migration `003` và gắn thẻ sản phẩm trong CMS thì mới có gì để phối), **Mua nhóm** (giá giảm theo số người trong nhóm, mời bạn bằng mã / link; cần migration `004` và bật ở CMS; `backend/src/services/groupBuy.js`; không thu tiền lúc tham gia), **Quà tặng** (người thân chọn quà cho bạn nam theo dịp + size + ngân sách, viết thiệp có xem trước, đặt đơn quà CHỈ chuyển khoản, CMS in thiệp A6 + phiếu không giá; cần migration `005`; `backend/src/services/gifts.js` + `giftOrders.js`; đặt đơn quà gọi `createOrder` KHÔNG sửa nó).
 - Đã test trên DB tạm + Keycloak thử nghiệm + bản web của app trên Edge; **chưa thử điện thoại thật/Expo Go**, chưa chạy `setup:keycloak` trên Keycloak thật.
-- Chưa có: test trong repo, cổng thanh toán online (thẻ/ví), tài khoản ngân hàng thật (đặt `BANK_*` trong `backend/.env`, chưa quét thử bằng app ngân hàng thật), nối hãng vận chuyển thật (GHN/GHTK), quên mật khẩu/xác minh email (cần SMTP), thông báo đẩy. Theme đăng nhập Keycloak `hfarm` đã làm (`keycloak/themes/hfarm`) nhưng realm thật chưa chọn.
+- Chưa có: test tự động cho phần còn lại (mới có test cho Stylist, Mua nhóm và Quà tặng: `cd backend && npm test`), cổng thanh toán online (thẻ/ví), tài khoản ngân hàng thật (đặt `BANK_*` trong `backend/.env`, chưa quét thử bằng app ngân hàng thật), nối hãng vận chuyển thật (GHN/GHTK), quên mật khẩu/xác minh email (cần SMTP), thông báo đẩy. Theme đăng nhập Keycloak `hfarm` đã làm (`keycloak/themes/hfarm`) nhưng realm thật chưa chọn.
 - Mặc định Docker/dev là chế độ không xác thực: chỉ chạy trên máy mình.
 - Việc tiếp theo gợi ý: thử điện thoại thật, đưa test vào repo, chốt chiến lược đăng nhập app (Direct access grants), thanh toán thật.
 

@@ -20,7 +20,7 @@ export const cartSignature = (cart) => (cart?.items ?? []).map((i) => `${i.varia
 
 // Backend KHÔNG giới hạn số lượng trong giỏ theo tồn kho, nên app tự phát hiện:
 //   'out'  = hết hàng (stock <= 0)      'over' = số lượng trong giỏ vượt tồn kho
-//   'gone' = sản phẩm đã ngừng bán (goneId = mã biến thể mà /orders/quote báo "không còn bán"; giỏ không trả cờ này)
+//   'gone' = sản phẩm đã ngừng bán (goneId = mã mẫu mã mà /orders/quote báo "không còn bán"; giỏ không trả cờ này)
 export function lineIssue(item, goneId = null) {
   if (goneId != null && item.variant_id === goneId) return 'gone';
   const stock = Number(item.stock);

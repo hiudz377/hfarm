@@ -13,7 +13,7 @@ const STATUS_VI = {
 export const viMessage = (msg) =>
   String(msg ?? '').replace(/\b(PENDING|CONFIRMED|PROCESSING|SHIPPING|COMPLETED|CANCELLED|RETURNED)\b/g, (s) => STATUS_VI[s]);
 
-// Quote / đặt hàng báo "Sản phẩm (mã 12) không còn bán": lấy mã biến thể để đánh dấu đúng dòng trong giỏ.
+// Quote / đặt hàng báo "Sản phẩm (mã 12) không còn bán": lấy mã mẫu mã để đánh dấu đúng dòng trong giỏ.
 // Trả về số, hoặc null nếu lỗi không phải kiểu này.
 export function goneVariantId(message) {
   const m = /Sản phẩm \(mã (\d+)\) không còn bán/.exec(String(message ?? ''));

@@ -88,7 +88,7 @@ export default function Inventory() {
   };
 
   const kpis = [
-    { key: 'all', label: 'Tổng số biến thể', value: result.stats.variants ?? 0, icon: <AppstoreOutlined />, tone: 'blue' },
+    { key: 'all', label: 'Tổng số mẫu mã', value: result.stats.variants ?? 0, icon: <AppstoreOutlined />, tone: 'blue' },
     { key: 'low', label: 'Sắp hết hàng (≤ 5)', value: result.stats.low_stock ?? 0, icon: <WarningOutlined />, tone: 'orange' },
     { key: 'out', label: 'Hết hàng', value: result.stats.out_of_stock ?? 0, icon: <CloseCircleOutlined />, tone: 'red' },
   ];
@@ -132,7 +132,7 @@ export default function Inventory() {
 
   return (
     <>
-      <PageHeader title="Kho hàng" description="Theo dõi tồn kho và lịch sử nhập, xuất của từng biến thể." />
+      <PageHeader title="Kho hàng" description="Theo dõi tồn kho và lịch sử nhập, xuất của từng mẫu mã." />
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         {kpis.map((k) => (
           <Col xs={24} sm={8} key={k.key}>
@@ -169,7 +169,7 @@ export default function Inventory() {
             ]}
             onChange={({ target: { value } }) => setMode(value)}
           />
-          <span className="filter-meta">{result.total} biến thể</span>
+          <span className="filter-meta">{result.total} mẫu mã</span>
         </div>
         <Table
           className="data-table"
@@ -182,7 +182,7 @@ export default function Inventory() {
             current: filters.page, pageSize: filters.limit, total: result.total, showSizeChanger: true, pageSizeOptions: [20, 50, 100],
             onChange: (page, limit) => setFilters((current) => ({ ...current, page: limit !== current.limit ? 1 : page, limit })),
           }}
-          locale={{ emptyText: <Empty description="Chưa có biến thể phù hợp" /> }}
+          locale={{ emptyText: <Empty description="Chưa có mẫu mã phù hợp" /> }}
         />
       </Card>
 
@@ -234,7 +234,7 @@ export default function Inventory() {
       >
         {historyItem && <Descriptions size="small" column={1} style={{ marginBottom: 18 }}>
           <Descriptions.Item label="Sản phẩm">{historyItem.product_name}</Descriptions.Item>
-          <Descriptions.Item label="Biến thể">{historyItem.sku} · {historyItem.size_name} / {historyItem.color_name}</Descriptions.Item>
+          <Descriptions.Item label="Mẫu mã">{historyItem.sku} · {historyItem.size_name} / {historyItem.color_name}</Descriptions.Item>
           <Descriptions.Item label="Tồn hiện tại"><StockTag quantity={historyItem.stock_quantity} /></Descriptions.Item>
         </Descriptions>}
         <Table

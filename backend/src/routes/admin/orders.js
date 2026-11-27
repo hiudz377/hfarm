@@ -4,6 +4,7 @@ const { wrap, httpError, paging } = require('../../utils');
 const {
   changeOrderStatus, getOrderDetail, bulkOrderAction, orderCounts, TRANSITIONS,
 } = require('../../services/orders');
+const { getGift } = require('../../services/giftOrders');
 const { confirmPaymentManually } = require('../../services/payments');
 const { listEvents, addEvent, deleteEvent } = require('../../services/tracking');
 
@@ -29,12 +30,17 @@ router.get('/', wrap(async (req, res) => {
     const like = `%${req.query.q}%`;
     params.push(like, like, like, like);
   }
+  // &gift=1 chỉ đơn quà tặng, &gift=wrap chỉ đơn quà có gói hộp (nhân viên cần gói)
+  if (req.query.gift === '1') where.push('g.order_id IS NOT NULL');
+  else if (req.query.gift === 'wrap') where.push('g.wrap = 1');
   const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
-  const from = 'FROM orders o JOIN users u ON u.id = o.user_id LEFT JOIN shipments s ON s.order_id = o.id';
+  const from = `FROM orders o JOIN users u ON u.id = o.user_id LEFT JOIN shipments s ON s.order_id = o.id
+                LEFT JOIN order_gifts g ON g.order_id = o.id`;
   const [[{ total }]] = await db.query(`SELECT COUNT(*) AS total ${from} ${w}`, params);
   const [rows] = await db.query(
     `SELECT o.id, o.order_code, o.recipient_name, o.recipient_phone, o.total_amount, o.status, o.payment_status,
             o.created_at, u.email AS customer_email, s.carrier, s.tracking_code,
+            (g.order_id IS NOT NULL) AS is_gift, COALESCE(g.wrap, 0) AS gift_wrap,
             (SELECT payment_method FROM payments WHERE order_id = o.id ORDER BY id LIMIT 1) AS payment_method
      ${from} ${w} ORDER BY o.id DESC LIMIT ? OFFSET ?`,
     [...params, limit, offset]);
@@ -56,7 +62,8 @@ router.post('/bulk', wrap(async (req, res) => {
 // Chi tiết đơn kèm hạn thanh toán (đơn chuyển khoản) và hành trình do nhân viên ghi
 router.get('/:id', wrap(async (req, res) => {
   const detail = await getOrderDetail(req.params.id);
-  res.json({ ...detail, shipment_events: await listEvents(detail.id) });
+  // gift: thiệp + ẩn giá + gói quà (null nếu không phải đơn quà); card là mẫu thiệp đầy đủ để CMS in
+  res.json({ ...detail, shipment_events: await listEvents(detail.id), gift: await getGift(detail.id) });
 }));
 
 // Nhân viên xác nhận đã nhận tiền chuyển khoản: { transaction_code?, note? }

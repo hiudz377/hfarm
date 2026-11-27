@@ -161,7 +161,7 @@ function CartScreen() {
         </View>
         {couponApplied ? (
           <View style={styles.couponMsgRow}>
-            <Text style={styles.couponOk}>Đã áp dụng mã {code}: giảm {money(quote.data.discount_amount)}</Text>
+            <Text style={styles.couponOk}>Đã áp dụng mã {code}: giảm {money(quote.data.discount_amount - (quote.data.group_discount ?? 0))}</Text>
             <Pressable onPress={clearCoupon} hitSlop={8}><Text style={styles.couponClear}>Bỏ mã</Text></Pressable>
           </View>
         ) : couponError ? (
@@ -175,7 +175,8 @@ function CartScreen() {
       <Card style={styles.box}>
         <PriceSummary
           subtotal={cart.data.subtotal}
-          discount={couponApplied ? quote.data.discount_amount : 0}
+          discount={quoteOk ? (couponApplied ? quote.data.discount_amount : (quote.data.group_discount ?? 0)) : 0}
+          groupDiscount={quoteOk ? (quote.data.group_discount ?? 0) : 0}
           couponCode={couponApplied ? code : null}
           shipping={quoteOk ? quote.data.shipping_fee : null}
           total={quoteOk ? quote.data.total_amount : null}

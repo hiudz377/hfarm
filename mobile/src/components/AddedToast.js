@@ -26,7 +26,7 @@ export default function AddedToast({ toast, bottom = 0, onView, onClose }) {
       style={[styles.wrap, { bottom, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }] }]}
     >
       <View style={styles.bar} role="alert">
-        <Photo uri={toast.image} style={styles.photo} />
+        <Photo uri={toast.image} style={styles.photo} whole />
         <View style={styles.text}>
           <View style={styles.titleRow}>
             <Ionicons name="checkmark-circle" size={16} color={colors.primary} />

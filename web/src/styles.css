@@ -58,7 +58,12 @@ body {
 }
 .admin-menu .ant-menu-item { margin-block: 4px !important; }
 .admin-menu .ant-menu-item-selected { background: #2e7d32 !important; }
-.menu-order-label { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+/* Thanh bên rộng 240px: bớt lề trong của mục (antd mặc định 24px) để "Giao dịch ngân hàng" + huy hiệu không bị cắt.
+   Chỉ khi mở rộng: lúc thu gọn antd tự căn biểu tượng ra giữa */
+.admin-sider:not(.ant-layout-sider-collapsed) .admin-menu .ant-menu-item { padding-inline: 16px !important; }
+.menu-order-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.menu-order-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-order-label .ant-badge { flex: none; }
 
 .admin-main { min-width: 0; }
 .admin-header {
@@ -282,3 +287,12 @@ body {
   .header-user-text, .header-user-caret { display: none; }
   .header-user { max-width: none; }
 }
+
+/* Mục "Gợi ý bộ đồ (Stylist)" trong ngăn sản phẩm */
+.stylist-box { border: 1px solid #e0e8e1; border-radius: 10px; background: #f8fbf8; padding: 14px 16px 2px; margin-bottom: 20px; }
+.stylist-title { font-weight: 600; margin-bottom: 2px; }
+.stylist-help { color: rgba(0, 0, 0, 0.55); font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
+
+/* Mục "Mua nhóm" trong ngăn sản phẩm: các hàng bậc giá */
+.group-tiers { margin-bottom: 4px; }
+.group-tier-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }

@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   BankOutlined, CarOutlined, CheckCircleOutlined, CheckOutlined, CloseCircleOutlined, DeleteOutlined, EllipsisOutlined,
-  EyeOutlined, PrinterOutlined, ReloadOutlined, RollbackOutlined,
+  EyeOutlined, GiftOutlined, PrinterOutlined, ReloadOutlined, RollbackOutlined,
 } from '@ant-design/icons';
 import QRCode from 'qrcode';
 import api, { errMsg } from '../api';
@@ -27,6 +27,10 @@ const shortDate = (d) => {
   return `${p(x.getDate())}/${p(x.getMonth() + 1)} ${p(x.getHours())}:${p(x.getMinutes())}`;
 };
 
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+})[character]);
+
 // Vị trí của đơn trên dòng tiến trình (Hủy / Hoàn trả nằm ngoài tiến trình)
 const STAGE = { PENDING: 0, CONFIRMED: 1, PROCESSING: 1, SHIPPING: 2, COMPLETED: 3 };
 
@@ -44,7 +48,7 @@ export default function Orders() {
   const [data, setData] = useState({ data: [], total: 0 });
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState({ group: 'ALL', q: '', payment: '', page: 1, limit: 20 });
+  const [filters, setFilters] = useState({ group: 'ALL', q: '', payment: '', gift: '', page: 1, limit: 20 });
   const [selectedKeys, setSelectedKeys] = useState([]);
   const [busy, setBusy] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -62,6 +66,7 @@ export default function Orders() {
     return {
       status: group ? group.statuses.join(',') : undefined,
       payment_status: filters.payment || undefined,
+      gift: filters.gift || undefined,
       q: filters.q || undefined,
       page: filters.page,
       limit: filters.limit,
@@ -229,15 +234,15 @@ export default function Orders() {
     // QR chứa mã vận đơn: người giao/kho quét để đối chiếu nhanh (chưa có mã vận đơn thì in mã đơn)
     const qrText = detail.shipment?.tracking_code || detail.order_code;
     const qrImage = await QRCode.toDataURL(qrText, { margin: 1, width: 220, errorCorrectionLevel: 'M' }).catch(() => null);
-    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    })[character]);
+    // Đơn quà ẩn giá: phiếu bỏ trong hộp KHÔNG ghi giá tiền (cả từng dòng lẫn tổng); chỉ ghi đã/chưa thanh toán
+    const gift = detail.gift;
+    const hidePrices = !!gift?.hide_prices;
     const itemRows = detail.items.map((item) => `
       <tr>
         <td>${escapeHtml(item.product_name)} (${escapeHtml(item.size_name)} / ${escapeHtml(item.color_name)})</td>
         <td>${escapeHtml(item.sku)}</td>
         <td class="number">${escapeHtml(item.quantity)}</td>
-        <td class="number">${escapeHtml(money(item.line_total))}</td>
+        ${hidePrices ? '' : `<td class="number">${escapeHtml(money(item.line_total))}</td>`}
       </tr>`).join('');
     const address = [detail.shipping_address, detail.ward, detail.district, detail.province]
       .filter(Boolean).map(escapeHtml).join(', ');
@@ -249,6 +254,12 @@ export default function Orders() {
       : `<strong>${escapeHtml(money(detail.total_amount))}</strong>`;
     const tracking = detail.shipment?.tracking_code
       ? `<div class="section"><strong>Mã vận đơn:</strong> ${escapeHtml(detail.shipment.tracking_code)}${detail.shipment.carrier ? ` · ${escapeHtml(detail.shipment.carrier)}` : ''}</div>`
+      : '';
+    const dueHtml = hidePrices
+      ? `<div class="total"><strong>${detail.payment_status === 'PAID' ? 'Đã thanh toán, không thu tiền' : 'Chưa nhận chuyển khoản'}</strong></div>`
+      : `<div class="total">${dueLabel}: ${amountDue}</div>`;
+    const giftNote = gift
+      ? `<div class="section"><strong>🎁 Đơn quà tặng${gift.wrap ? ', cần gói hộp' : ''}.</strong> Cần đổi size? Liên hệ HFarm kèm mã đơn <strong>${escapeHtml(detail.order_code)}</strong>.</div>`
       : '';
 
     printWindow.document.open();
@@ -277,11 +288,57 @@ export default function Orders() {
           ${qrImage ? `<div class="qr"><img src="${qrImage}" alt="QR">${escapeHtml(qrText)}</div>` : ''}
         </div>
         ${tracking}
+        ${giftNote}
         <div class="section"><strong>Người nhận:</strong> ${escapeHtml(detail.recipient_name)} · ${escapeHtml(detail.recipient_phone)}<br>
         <strong>Địa chỉ:</strong> ${address}</div>
-        <table><thead><tr><th>Sản phẩm</th><th>SKU</th><th class="number">SL</th><th class="number">Thành tiền</th></tr></thead>
+        <table><thead><tr><th>Sản phẩm</th><th>SKU</th><th class="number">SL</th>${hidePrices ? '' : '<th class="number">Thành tiền</th>'}</tr></thead>
         <tbody>${itemRows}</tbody></table>
-        <div class="total">${dueLabel}: ${amountDue}</div>
+        ${dueHtml}
+        <script>window.onload = function () { window.print(); };</script>
+      </body></html>`);
+    printWindow.document.close();
+  };
+
+  // In thiệp giấy A6 cho đơn quà: vẽ lại đúng mẫu thiệp khách đã chọn (màu, viền, ký tự trang trí, kiểu chữ lấy từ backend,
+  // cùng nguồn với bản xem trước trong app: mobile/src/components/GiftCardView.js). Nhớ bật "Đồ họa nền" nếu trình duyệt không tự in màu nền.
+  const printGiftCard = () => {
+    const gift = detail?.gift;
+    if (!gift?.card) return;
+    const printWindow = window.open('', '_blank', 'width=700,height=800');
+    if (!printWindow) {
+      message.error('Trình duyệt đã chặn cửa sổ in. Hãy cho phép cửa sổ bật lên rồi thử lại.');
+      return;
+    }
+    const c = gift.card;
+    const text = String(gift.card_message ?? '').trim();
+    const len = [...text].length;
+    const pt = len < 70 ? 14 : len < 150 ? 12 : len < 230 ? 11 : 10;
+    const family = c.font === 'serif' ? 'Georgia, "Times New Roman", serif' : 'Arial, Helvetica, sans-serif';
+    const ornament = c.ornament === '—' ? '———' : [c.ornament, c.ornament, c.ornament].join('  ');
+    const frame = c.border === 'none' ? '' : `<div class="frame" style="border:0.6mm ${c.border === 'dashed' ? 'dashed' : 'solid'} ${escapeHtml(c.accent)}"></div>`;
+    const frame2 = c.border === 'double' ? `<div class="frame2" style="border:0.25mm solid ${escapeHtml(c.accent)}"></div>` : '';
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="vi"><head><meta charset="utf-8"><title>Thiệp ${escapeHtml(detail.order_code)}</title>
+      <style>
+        @page { size: A6 portrait; margin: 0; }
+        html, body { margin: 0; padding: 0; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .card { position: relative; box-sizing: border-box; width: 105mm; height: 148mm; overflow: hidden; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; text-align: center; padding: 16mm 14mm;
+          background: ${escapeHtml(c.bg)}; color: ${escapeHtml(c.ink)}; font-family: ${family}; }
+        .frame { position: absolute; inset: 5mm; }
+        .frame2 { position: absolute; inset: 7mm; }
+        .orn { color: ${escapeHtml(c.accent)}; font-size: 5mm; letter-spacing: 1.5mm; margin-bottom: 7mm; }
+        .msg { font-size: ${pt}pt; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+        .from { margin-top: 8mm; color: ${escapeHtml(c.accent)}; font-style: italic; font-weight: bold; font-size: 11pt; }
+      </style></head><body>
+        <div class="card">
+          ${frame}${frame2}
+          <div class="orn">${escapeHtml(ornament)}</div>
+          <div class="msg">${escapeHtml(text)}</div>
+          ${gift.sender_name ? `<div class="from">— ${escapeHtml(gift.sender_name)}</div>` : ''}
+        </div>
         <script>window.onload = function () { window.print(); };</script>
       </body></html>`);
     printWindow.document.close();
@@ -294,16 +351,21 @@ export default function Orders() {
 
   const columns = [
     {
-      title: 'Đơn hàng', dataIndex: 'order_code', width: 190,
+      title: 'Đơn hàng', dataIndex: 'order_code', width: 220,
       render: (code, r) => (
         <div>
           <Typography.Text strong className="order-code">{code}</Typography.Text>
+          {r.is_gift ? (
+            <span style={{ marginInlineStart: 6 }}>
+              <Tag color="magenta" icon={<GiftOutlined />} style={{ marginInlineEnd: 0 }}>Quà{r.gift_wrap ? ' · gói hộp' : ''}</Tag>
+            </span>
+          ) : null}
           <div className="cell-sub">{shortDate(r.created_at)}</div>
         </div>
       ),
     },
     {
-      title: 'Người nhận', dataIndex: 'recipient_name', width: 190,
+      title: 'Người nhận', dataIndex: 'recipient_name', width: 160,
       render: (name, r) => (
         <div>
           <div>{name}</div>
@@ -402,6 +464,12 @@ export default function Orders() {
               { value: 'UNPAID', label: 'Chưa thanh toán' },
               { value: 'PAID', label: 'Đã thanh toán' },
             ]} />
+          <Select value={filters.gift} style={{ width: 210 }} onChange={(gift) => update({ gift })} aria-label="Lọc đơn quà tặng"
+            options={[
+              { value: '', label: 'Mọi loại đơn' },
+              { value: '1', label: 'Đơn quà tặng' },
+              { value: 'wrap', label: 'Đơn quà cần gói hộp' },
+            ]} />
           <Button icon={<ReloadOutlined />} onClick={() => load()} loading={loading}>Làm mới</Button>
         </div>
 
@@ -450,7 +518,12 @@ export default function Orders() {
             <Tag color={orderTag(detail.status).color}>{orderTag(detail.status).text}</Tag>
           </Space>
         ) : ''}
-        extra={detail && <Button icon={<PrinterOutlined />} onClick={printDeliverySlip}>In phiếu giao hàng</Button>}>
+        extra={detail && (
+          <Space>
+            {detail.gift?.card && <Button icon={<GiftOutlined />} onClick={printGiftCard}>In thiệp</Button>}
+            <Button icon={<PrinterOutlined />} onClick={printDeliverySlip}>In phiếu giao hàng</Button>
+          </Space>
+        )}>
         {detail && (
           <>
             {stage !== undefined ? (
@@ -459,6 +532,28 @@ export default function Orders() {
             ) : (
               <Alert type="error" showIcon style={{ marginBottom: 16 }}
                 message={detail.status === 'CANCELLED' ? 'Đơn đã bị hủy' : 'Đơn đã hoàn trả'} />
+            )}
+
+            {detail.gift && (
+              <Alert type="info" showIcon icon={<GiftOutlined />} style={{ marginBottom: 16 }}
+                message={`Đơn quà tặng${detail.gift.occasion_label ? ` · ${detail.gift.occasion_label}` : ''}${detail.gift.wrap ? ' · cần gói hộp' : ''}`}
+                description={(
+                  <>
+                    {detail.gift.card ? (
+                      <div style={{ whiteSpace: 'pre-wrap' }}>
+                        <b>Thiệp {detail.gift.card.name}</b>
+                        {detail.gift.card_message ? `: “${detail.gift.card_message}”` : ' (chưa có lời nhắn)'}
+                        {detail.gift.sender_name ? ` — ${detail.gift.sender_name}` : ''}
+                      </div>
+                    ) : <div>Không kèm thiệp.</div>}
+                    <div>
+                      {detail.gift.hide_prices
+                        ? 'Phiếu giao hàng in ra KHÔNG ghi giá, bỏ vào hộp cùng quà.'
+                        : 'Khách để phiếu giao hàng có ghi giá.'}
+                      {' '}Đơn quà chỉ thanh toán bằng chuyển khoản.
+                    </div>
+                  </>
+                )} />
             )}
 
             {needPay && (
@@ -558,7 +653,10 @@ export default function Orders() {
               ]} />
             <Descriptions size="small" column={1} style={{ marginTop: 12 }}>
               <Descriptions.Item label="Tạm tính">{money(detail.subtotal)}</Descriptions.Item>
-              <Descriptions.Item label="Giảm giá">- {money(detail.discount_amount)}</Descriptions.Item>
+              <Descriptions.Item label="Giảm giá">
+                - {money(detail.discount_amount)}
+                {detail.group_discount > 0 && <span className="cell-sub-inline"> (trong đó mua nhóm {money(detail.group_discount)})</span>}
+              </Descriptions.Item>
               <Descriptions.Item label="Phí vận chuyển">{money(detail.shipping_fee)}</Descriptions.Item>
               <Descriptions.Item label="Tổng cộng"><b>{money(detail.total_amount)}</b></Descriptions.Item>
             </Descriptions>

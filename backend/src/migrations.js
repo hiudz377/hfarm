@@ -5,6 +5,9 @@ const db = require('./db');
 const REQUIRED = [
   { file: '001_payment_shipping.sql', tables: ['bank_transactions', 'shipping_zones', 'shipment_events'], columns: [['orders', 'payment_expires_at']] },
   { file: '002_banners.sql', tables: ['banners'], columns: [] },
+  { file: '003_outfit_stylist.sql', tables: [], columns: [['products', 'outfit_role'], ['products', 'gender'], ['products', 'styles'], ['products', 'occasions']] },
+  { file: '004_group_buy.sql', tables: ['product_group_tiers', 'buy_groups', 'buy_group_members'], columns: [['products', 'group_buy_enabled'], ['products', 'group_buy_hours']] },
+  { file: '005_gift_orders.sql', tables: ['order_gifts'], columns: [] },
 ];
 
 // Trả danh sách file migration còn thiếu. Không kết nối được database thì trả null (backend vẫn khởi động như trước).

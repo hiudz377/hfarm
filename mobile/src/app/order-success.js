@@ -13,7 +13,7 @@ import { colors, space } from '@/utils/theme';
 // Mở bằng router.replace từ màn Thanh toán, kèm ?id=&code=&total=&method=&eta=
 // Chuyển khoản: hiện ngay mã QR (PaymentQR tự đếm ngược hạn trả và cập nhật khi tiền về)
 export default function OrderSuccess() {
-  const { id, code, total, method, eta } = useLocalSearchParams();
+  const { id, code, total, method, eta, gift } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const bank = method === 'BANK_TRANSFER';
@@ -49,6 +49,10 @@ export default function OrderSuccess() {
             </View>
           ) : null}
         </Card>
+
+        {gift === '1' ? (
+          <Text style={styles.note}>🎁 Cửa hàng sẽ chuẩn bị quà (kèm thiệp nếu bạn đã viết) và gửi cho người nhận sau khi nhận được tiền chuyển khoản.</Text>
+        ) : null}
 
         {bank && id ? (
           <Card style={styles.card}>

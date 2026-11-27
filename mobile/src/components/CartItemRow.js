@@ -13,7 +13,7 @@ export default function CartItemRow({ item, busy, goneId = null, onOpen, onChang
   return (
     <View style={[styles.row, issue && styles.rowIssue]}>
       <Pressable onPress={onOpen}>
-        <Photo uri={item.image_url} style={styles.photo} />
+        <Photo uri={item.image_url} style={styles.photo} whole />
       </Pressable>
       <View style={styles.info}>
         <Pressable onPress={onOpen}>

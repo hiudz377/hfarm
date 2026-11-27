@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { addToCart } from '@/api/cart';
 import { useAuth } from '@/auth/AuthProvider';
+import { createGroup } from '@/api/groups';
 import { fetchProduct } from '@/api/products';
 import { fetchShippingEstimate } from '@/api/shipping';
 import AddedToast from '@/components/AddedToast';
@@ -14,6 +15,7 @@ import Button from '@/components/Button';
 import Chip from '@/components/Chip';
 import EmptyState from '@/components/EmptyState';
 import FavoriteButton from '@/components/FavoriteButton';
+import GroupBuyCard from '@/components/GroupBuyCard';
 import Loading from '@/components/Loading';
 import Photo from '@/components/Photo';
 import QuantityStepper from '@/components/QuantityStepper';
@@ -22,6 +24,7 @@ import ReviewSection from '@/components/ReviewSection';
 import Stars from '@/components/Stars';
 import { etaText, money } from '@/utils/format';
 import { goBack, goToTab } from '@/utils/nav';
+import { groupKey, MY_GROUPS_KEY } from '@/utils/queryKeys';
 import { CART_KEY, useCart } from '@/utils/useCart';
 import { colors, radius, space } from '@/utils/theme';
 
@@ -69,7 +72,7 @@ export default function ProductDetail() {
   // Thông tin giao hàng (vùng mặc định của cửa hàng): phí, miễn phí từ bao nhiêu, thời gian giao
   const ship = useQuery({ queryKey: ['shipping-estimate', 'default'], queryFn: () => fetchShippingEstimate(), staleTime: 5 * 60 * 1000 });
 
-  // Giỏ hiện tại (cùng cache với tab Giỏ hàng): để biết trong giỏ đã có bao nhiêu của biến thể này
+  // Giỏ hiện tại (cùng cache với tab Giỏ hàng): để biết trong giỏ đã có bao nhiêu của mẫu mã này
   const { data: cart } = useCart();
 
   // Chống chạm đúp: backend CỘNG DỒN số lượng và không giới hạn theo tồn kho, nên hai lần chạm sát nhau sẽ thêm gấp đôi.
@@ -91,6 +94,23 @@ export default function ProductDetail() {
     },
     onSettled: () => {
       adding.current = false;
+    },
+  });
+
+  // Mua nhóm: tạo nhóm cho mẫu mã đang chọn rồi mở màn nhóm để mời bạn bè
+  const makeGroup = useMutation({
+    mutationFn: createGroup,
+    onSuccess: (g) => {
+      queryClient.setQueryData(groupKey(g.code), g);
+      queryClient.invalidateQueries({ queryKey: MY_GROUPS_KEY });
+      router.push(`/group/${g.code}`);
+    },
+    onError: (e) => {
+      const msg = errMsg(e);
+      const existing = /mã ([A-Z2-9]{8})/.exec(msg)?.[1]; // đã có nhóm mở cho sản phẩm này: cho mở luôn nhóm đó
+      Alert.alert('Không tạo được nhóm', msg, existing
+        ? [{ text: 'Đóng', style: 'cancel' }, { text: 'Mở nhóm đó', onPress: () => router.push(`/group/${existing}`) }]
+        : undefined);
     },
   });
 
@@ -118,7 +138,7 @@ export default function ProductDetail() {
   const room = Math.max(stock - inCart, 0);
   const quantity = Math.min(qty, Math.max(room, 1));
 
-  // Còn hàng nếu có biến thể khớp (màu/size đang chọn, null = bất kỳ) với tồn kho > 0
+  // Còn hàng nếu có mẫu mã khớp (màu/size đang chọn, null = bất kỳ) với tồn kho > 0
   const inStock = (c, s) => variants.some((v) => (c == null || v.color_id === c) && (s == null || v.size_id === s) && Number(v.stock) > 0);
 
   const prices = variants.map((v) => v.price);
@@ -127,7 +147,7 @@ export default function ProductDetail() {
     : prices.length && Math.min(...prices) !== Math.max(...prices)
       ? `${money(Math.min(...prices))} - ${money(Math.max(...prices))}`
       : money(prices.length ? prices[0] : product.base_price);
-  // Giá gạch ngang + nhãn giảm giá chỉ hiện khi biết rõ đang nói về phiên bản nào: đã chọn phiên bản, hoặc mọi phiên bản cùng một giá.
+  // Giá gạch ngang + nhãn giảm giá chỉ hiện khi biết rõ đang nói về mẫu mã nào: đã chọn mẫu mã, hoặc mọi mẫu mã cùng một giá.
   // (Chưa chọn mà giá là một khoảng thì không hiện, tránh nhãn giảm giá đi kèm khoảng giá gây hiểu nhầm.)
   const uniformPrice = prices.length > 0 && Math.min(...prices) === Math.max(...prices);
   const refVariant = variant ?? (uniformPrice ? variants[0] : null);
@@ -141,12 +161,32 @@ export default function ProductDetail() {
     }
   };
 
+  // Mua nhóm: tạo nhóm cho mẫu mã đang chọn (cần đăng nhập, cần chọn đủ size + màu, còn hàng)
+  const onCreateGroup = () => {
+    if (status !== 'authenticated') {
+      Alert.alert('Cần đăng nhập', 'Hãy đăng nhập hoặc tạo tài khoản để tạo nhóm mua chung.', [
+        { text: 'Để sau', style: 'cancel' },
+        { text: 'Đăng nhập', onPress: () => router.push('/login') },
+      ]);
+      return;
+    }
+    if (!variant) {
+      Alert.alert('Chọn size và màu', 'Hãy chọn size và màu bạn muốn trước khi tạo nhóm.');
+      return;
+    }
+    if (stock <= 0) {
+      Alert.alert('Hết hàng', 'Mẫu mã này đã hết hàng, hãy chọn size hoặc màu khác.');
+      return;
+    }
+    makeGroup.mutate({ productId: product.id, variantId: variant.id });
+  };
+
   let cta = 'Thêm vào giỏ';
   if (!variants.length) cta = 'Chưa mở bán';
   else if (colorId == null && sizeId == null) cta = 'Chọn màu và size';
   else if (colorId == null) cta = 'Chọn màu';
   else if (sizeId == null) cta = 'Chọn size';
-  else if (!variant) cta = 'Không có phiên bản này';
+  else if (!variant) cta = 'Không có mẫu mã này';
   else if (stock <= 0) cta = 'Hết hàng';
   else if (room <= 0) cta = 'Đã có tối đa trong giỏ';
   const canAdd = !!variant && room > 0;
@@ -166,7 +206,7 @@ export default function ProductDetail() {
             showsHorizontalScrollIndicator={false}
             keyExtractor={(_, i) => String(i)}
             getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-            renderItem={({ item }) => <Photo uri={item} style={{ width, height: imgHeight }} />}
+            renderItem={({ item }) => <Photo uri={item} style={{ width, height: imgHeight }} whole />}
             onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
           />
           <View style={styles.actions}>
@@ -204,7 +244,7 @@ export default function ProductDetail() {
                 aria-label={`Xem ảnh ${index + 1}`}
                 style={[styles.thumbWrap, index === page && styles.thumbOn]}
               >
-                <Photo uri={item} style={styles.thumb} />
+                <Photo uri={item} style={styles.thumb} whole />
               </Pressable>
             )}
           />
@@ -292,12 +332,24 @@ export default function ProductDetail() {
           </Text>
         ) : null}
 
+        {product.group_buy && prices.length ? (
+          <View style={styles.section}>
+            <GroupBuyCard
+              groupBuy={product.group_buy}
+              price={variant ? variant.price : Math.min(...prices)}
+              exact={!!variant}
+              creating={makeGroup.isPending}
+              onCreate={onCreateGroup}
+              onEnterCode={() => router.push('/groups')}
+            />
+          </View>
+        ) : null}
+
         <View style={styles.section}>
           <Text style={styles.label}>Thông tin sản phẩm</Text>
           <View style={styles.infoBox}>
             <InfoRow label="Danh mục" value={product.category_name} />
             {product.brand_name ? <InfoRow label="Thương hiệu" value={product.brand_name} /> : null}
-            <InfoRow label="Mã SKU" value={variant ? variant.sku : 'Chọn màu và size để xem'} />
             <InfoRow
               label="Tình trạng"
               value={variant ? (stock > 0 ? `Còn ${stock} sản phẩm` : 'Hết hàng') : variants.some((v) => Number(v.stock) > 0) ? 'Còn hàng' : 'Hết hàng'}

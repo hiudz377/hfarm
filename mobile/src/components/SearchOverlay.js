@@ -54,7 +54,7 @@ export default function SearchOverlay({ text, committed, history, onPickTerm, on
           ) : (
             (suggestions.data ?? []).map((p) => (
               <Pressable key={p.id} onPress={() => onOpenProduct(p, q)} style={styles.row} role="button" aria-label={`Mở ${p.name}`}>
-                <Photo uri={p.thumbnail} style={styles.thumb} />
+                <Photo uri={p.thumbnail} style={styles.thumb} whole />
                 <View style={styles.grow}>
                   <Highlighted name={p.name} query={q} />
                   <Text style={styles.price}>{money(p.price)}</Text>

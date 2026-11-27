@@ -3,6 +3,8 @@ const db = require('../../db');
 const { wrap, httpError, pick, uniqueSlug, tx } = require('../../utils');
 const { listProducts, getProduct } = require('../../services/products');
 const { changeStock } = require('../../services/stock');
+const { cleanProductTags } = require('../../services/stylist');
+const { getGroupConfig, saveGroupConfig } = require('../../services/groupBuy');
 
 async function insertImages(conn, productId, images) {
   for (let i = 0; i < images.length; i++) {
@@ -13,9 +15,9 @@ async function insertImages(conn, productId, images) {
   }
 }
 
-// Thêm 1 biến thể + dòng tồn kho (+ lịch sử nhập kho nếu có số lượng ban đầu)
+// Thêm 1 mẫu mã + dòng tồn kho (+ lịch sử nhập kho nếu có số lượng ban đầu)
 async function insertVariant(conn, productId, v, basePrice, userId) {
-  if (!v.size_id || !v.color_id || !v.sku) throw httpError(400, 'Biến thể cần size, màu và SKU');
+  if (!v.size_id || !v.color_id || !v.sku) throw httpError(400, 'Mẫu mã cần size, màu và SKU');
   const [r] = await conn.query(
     `INSERT INTO product_variants (product_id, size_id, color_id, sku, price, compare_at_price, image_url)
      VALUES (?,?,?,?,?,?,?)`,
@@ -29,15 +31,19 @@ async function insertVariant(conn, productId, v, basePrice, userId) {
 router.get('/', wrap(async (req, res) => res.json(await listProducts(req.query, false))));
 router.get('/:id', wrap(async (req, res) => res.json(await getProduct(req.params.id, false))));
 
-// { category_id, brand_id, name, description, base_price, status, images: [url], variants: [{size_id,color_id,sku,price,quantity}] }
+// { category_id, brand_id, name, description, base_price, status, images: [url], variants: [{size_id,color_id,sku,price,quantity}],
+//   outfit_role, styles: [..], occasions: [..] (thẻ Stylist, tùy chọn) }
 router.post('/', wrap(async (req, res) => {
   const { name, category_id, base_price, brand_id, description, status, images = [], variants = [] } = req.body;
   if (!name || !category_id || base_price === undefined) throw httpError(400, 'Cần tên, danh mục và giá gốc');
+  const tags = cleanProductTags(req.body);
   const id = await tx(async (conn) => {
     const [r] = await conn.query(
-      `INSERT INTO products (category_id, brand_id, name, slug, description, base_price, status, created_by)
-       VALUES (?,?,?,?,?,?,?,?)`,
-      [category_id, brand_id || null, name, uniqueSlug(name), description || null, base_price, status || 'DRAFT', req.user.id]);
+      `INSERT INTO products (category_id, brand_id, name, slug, description, base_price, status, created_by,
+                             outfit_role, styles, occasions)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [category_id, brand_id || null, name, uniqueSlug(name), description || null, base_price, status || 'DRAFT', req.user.id,
+        tags.outfit_role ?? null, tags.styles ?? '', tags.occasions ?? '']);
     await insertImages(conn, r.insertId, images);
     for (const v of variants) await insertVariant(conn, r.insertId, v, base_price, req.user.id);
     return r.insertId;
@@ -47,7 +53,7 @@ router.post('/', wrap(async (req, res) => {
 
 // Sửa thông tin chung. Nếu gửi "images" thì thay toàn bộ ảnh
 router.put('/:id', wrap(async (req, res) => {
-  const data = pick(req.body, ['category_id', 'brand_id', 'name', 'description', 'base_price', 'status']);
+  const data = { ...pick(req.body, ['category_id', 'brand_id', 'name', 'description', 'base_price', 'status']), ...cleanProductTags(req.body) };
   await tx(async (conn) => {
     if (Object.keys(data).length) await conn.query('UPDATE products SET ? WHERE id = ?', [data, req.params.id]);
     if (Array.isArray(req.body.images)) {
@@ -58,13 +64,21 @@ router.put('/:id', wrap(async (req, res) => {
   res.json({ message: 'Đã cập nhật' });
 }));
 
+// Mua nhóm của sản phẩm: { enabled, hours, tiers: [{ min_members, discount_percent }] } (đọc + ghi, xem services/groupBuy.js)
+router.get('/:id/group-buy', wrap(async (req, res) => {
+  const cfg = await getGroupConfig(db, req.params.id);
+  if (!cfg) throw httpError(404, 'Không tìm thấy sản phẩm');
+  res.json(cfg);
+}));
+router.put('/:id/group-buy', wrap(async (req, res) => res.json(await saveGroupConfig(req.params.id, req.body))));
+
 // Không xóa cứng (đơn cũ còn tham chiếu): chỉ chuyển sang INACTIVE
 router.delete('/:id', wrap(async (req, res) => {
   await db.query("UPDATE products SET status = 'INACTIVE' WHERE id = ?", [req.params.id]);
   res.json({ message: 'Đã ngừng bán sản phẩm' });
 }));
 
-// ---- Biến thể ----
+// ---- Mẫu mã ----
 router.post('/:id/variants', wrap(async (req, res) => {
   const [p] = await db.query('SELECT base_price FROM products WHERE id = ?', [req.params.id]);
   if (!p.length) throw httpError(404, 'Không tìm thấy sản phẩm');
@@ -75,7 +89,7 @@ router.post('/:id/variants', wrap(async (req, res) => {
 router.post('/:id/variants/bulk', wrap(async (req, res) => {
   const { variants } = req.body;
   if (!Array.isArray(variants) || !variants.length || variants.length > 100) {
-    throw httpError(400, 'Cần gửi từ 1 đến 100 biến thể.');
+    throw httpError(400, 'Cần gửi từ 1 đến 100 mẫu mã.');
   }
   const [products] = await db.query('SELECT base_price FROM products WHERE id = ?', [req.params.id]);
   if (!products.length) throw httpError(404, 'Không tìm thấy sản phẩm');
@@ -84,7 +98,7 @@ router.post('/:id/variants/bulk', wrap(async (req, res) => {
       || !Number.isInteger(Number(variant.color_id)) || Number(variant.color_id) < 1
       || !String(variant.sku || '').trim()
       || !Number.isInteger(Number(variant.quantity)) || Number(variant.quantity) < 0) {
-      throw httpError(400, 'Thông tin biến thể hoặc số lượng ban đầu không hợp lệ.');
+      throw httpError(400, 'Thông tin mẫu mã hoặc số lượng ban đầu không hợp lệ.');
     }
   }
   const ids = await tx(async (conn) => {
@@ -101,7 +115,7 @@ router.put('/variants/:variantId', wrap(async (req, res) => {
   const data = pick(req.body, ['sku', 'price', 'compare_at_price', 'image_url', 'is_active']);
   if (!Object.keys(data).length) throw httpError(400, 'Không có dữ liệu để cập nhật');
   await db.query('UPDATE product_variants SET ? WHERE id = ?', [data, req.params.variantId]);
-  res.json({ message: 'Đã cập nhật biến thể' });
+  res.json({ message: 'Đã cập nhật mẫu mã' });
 }));
 
 // Nhập / xuất / điều chỉnh kho: { type: IMPORT|EXPORT|ADJUSTMENT, quantity, note }

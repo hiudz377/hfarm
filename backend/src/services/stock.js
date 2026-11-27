@@ -1,6 +1,6 @@
 const { httpError } = require('../utils');
 
-// Đổi tồn kho của 1 biến thể và ghi lịch sử. PHẢI gọi trong transaction (conn).
+// Đổi tồn kho của 1 mẫu mã và ghi lịch sử. PHẢI gọi trong transaction (conn).
 // IMPORT / ORDER_RESTOCK: cộng | EXPORT / ORDER_DEDUCT: trừ | ADJUSTMENT: đặt thẳng về số lượng
 async function changeStock(conn, { variantId, type, quantity, userId = null, refType = null, refId = null, note = null, label = '' }) {
   quantity = Number(quantity);

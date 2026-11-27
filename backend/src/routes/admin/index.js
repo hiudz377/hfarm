@@ -37,6 +37,7 @@ router.use(require('./upload'));
 router.use('/products', require('./products'));
 router.use('/inventory', require('./inventory'));
 router.use('/orders', require('./orders'));
+router.use('/groups', require('./groups'));
 router.use('/reviews', require('./reviews'));
 router.use(require('./misc'));
 

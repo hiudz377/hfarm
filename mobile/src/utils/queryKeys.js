@@ -14,5 +14,10 @@ export const PRODUCT_KEY = ['product']; // ['product', id]
 export const FAVORITES_KEY = ['favorites']; // ['favorites', 'ids'] (mảng id) và ['favorites', 'list'] (danh sách phân trang)
 export const reviewsKey = (productId) => ['reviews', String(productId)];
 
+// Mua nhóm: chi tiết một nhóm (có "me" của người đang đăng nhập) và danh sách nhóm của tôi
+export const GROUPS_KEY = ['groups'];
+export const groupKey = (code) => ['groups', 'detail', String(code)];
+export const MY_GROUPS_KEY = ['groups', 'mine'];
+
 // Dữ liệu riêng của người dùng đang đăng nhập: bị xóa khi phiên đổi để không lộ dữ liệu của người trước
-export const PRIVATE_QUERY_KEYS = [CART_KEY, QUOTE_KEY, ADDRESSES_KEY, ME_KEY, ORDERS_KEY, ['order'], ['order-payment'], ['order-tracking'], FAVORITES_KEY];
+export const PRIVATE_QUERY_KEYS = [CART_KEY, QUOTE_KEY, ADDRESSES_KEY, ME_KEY, ORDERS_KEY, ['order'], ['order-payment'], ['order-tracking'], FAVORITES_KEY, GROUPS_KEY];

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fetchGiftOptions } from '@/api/gifts';
 import { fetchBanners, fetchCategories } from '@/api/products';
 import { fetchPaymentMethods } from '@/api/payments';
 import { fetchShippingEstimate } from '@/api/shipping';
@@ -13,6 +14,7 @@ import CategoryTiles from '@/components/CategoryTiles';
 import HeroCarousel from '@/components/HeroCarousel';
 import ProductRail from '@/components/ProductRail';
 import { etaText, money } from '@/utils/format';
+import { daysLeftText, giftColors, OCCASION_EMOJI, serif, soonestOccasion } from '@/utils/giftTheme';
 import { usePullRefresh } from '@/utils/useRefresh';
 import { colors, radius, space } from '@/utils/theme';
 
@@ -20,7 +22,7 @@ function Perk({ icon, title, sub }) {
   return (
     <View style={styles.perk}>
       <Ionicons name={icon} size={20} color={colors.primary} />
-      <Text style={styles.perkTitle} numberOfLines={2}>{title}</Text>
+      <Text style={styles.perkTitle} numberOfLines={3}>{title}</Text>
       {sub ? <Text style={styles.perkSub} numberOfLines={2}>{sub}</Text> : null}
     </View>
   );
@@ -36,6 +38,9 @@ export default function Home() {
   const categories = useQuery({ queryKey: ['categories'], queryFn: fetchCategories, staleTime: 5 * 60 * 1000 });
   const estimate = useQuery({ queryKey: ['shipping-estimate', 'default'], queryFn: () => fetchShippingEstimate(), staleTime: 5 * 60 * 1000 });
   const methods = useQuery({ queryKey: ['payment-methods'], queryFn: fetchPaymentMethods, staleTime: 5 * 60 * 1000 });
+  // Quà tặng: nhắc dịp sắp tới (dịp có ngày cố định, còn <= 45 ngày). Lỗi mạng thì chỉ mất dòng nhắc, ô Quà tặng vẫn hiện
+  const giftOptions = useQuery({ queryKey: ['gift-options'], queryFn: fetchGiftOptions, staleTime: 10 * 60 * 1000 });
+  const soon = soonestOccasion(giftOptions.data?.occasions);
 
   const { refreshing, onRefresh } = usePullRefresh(
     useCallback(
@@ -76,7 +81,7 @@ export default function Home() {
 
       <Pressable onPress={() => goShop({ focus: '1' })} style={styles.search} role="button" aria-label="Tìm sản phẩm">
         <Ionicons name="search" size={18} color={colors.muted} />
-        <Text style={styles.searchText}>Tìm áo, quần, váy...</Text>
+        <Text style={styles.searchText}>Tìm áo, quần, giày...</Text>
       </Pressable>
 
       <HeroCarousel banners={banners.data} onOpen={openBanner} onShop={() => goShop()} />
@@ -96,6 +101,30 @@ export default function Home() {
           ) : null}
         </View>
       ) : null}
+
+      {/* Stylist cá nhân: nhập số đo + phong cách + hoàn cảnh + ngân sách, nhận cả bộ đồ */}
+      <Pressable onPress={() => router.push('/stylist')} style={styles.stylist} role="link" aria-label="Stylist cá nhân: gợi ý bộ đồ cho bạn">
+        <View style={styles.stylistIcon}>
+          <Ionicons name="sparkles" size={22} color={colors.primary} />
+        </View>
+        <View style={styles.stylistText}>
+          <Text style={styles.stylistTitle}>Hôm nay mặc gì?</Text>
+          <Text style={styles.stylistSub}>Nhập số đo, phong cách và ngân sách, Stylist phối sẵn cả bộ cho bạn.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+      </Pressable>
+
+      {/* Quà tặng: người thân chọn quà cho bạn nam theo dịp + size + ngân sách, viết thiệp, đặt đơn quà */}
+      <Pressable onPress={() => router.push('/gift')} style={styles.gift} role="link" aria-label="Quà tặng: chọn quà cho anh ấy">
+        <Text style={styles.giftEmoji}>{soon ? OCCASION_EMOJI[soon.value] ?? '🎁' : '🎁'}</Text>
+        <View style={styles.giftText}>
+          <Text style={styles.giftTitle}>Tặng quà cho anh ấy</Text>
+          <Text style={styles.giftSub}>
+            {soon ? `${soon.label} ${daysLeftText(soon.days_left)}. Chọn quà đúng size, kèm thiệp viết tay.` : 'Chọn quà đúng size theo dịp, kèm thiệp và gói quà.'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={giftColors.gold} />
+      </Pressable>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, styles.pad]}>Danh mục</Text>
@@ -142,6 +171,22 @@ const styles = StyleSheet.create({
   },
   perkTitle: { fontSize: 12, fontWeight: '800', color: colors.text, lineHeight: 16 },
   perkSub: { fontSize: 11, color: colors.muted, lineHeight: 14 },
+  stylist: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, padding: space.md,
+    borderRadius: radius.lg, backgroundColor: colors.primarySoft, borderWidth: 1, borderColor: colors.primary + '33',
+  },
+  stylistIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  stylistText: { flex: 1, gap: 2 },
+  stylistTitle: { fontSize: 16, fontWeight: '800', color: colors.primaryDark },
+  stylistSub: { fontSize: 12, color: colors.primaryDark, lineHeight: 16 },
+  gift: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md, marginHorizontal: space.lg, padding: space.md,
+    borderRadius: radius.lg, backgroundColor: giftColors.wine,
+  },
+  giftEmoji: { fontSize: 32, paddingHorizontal: 4 },
+  giftText: { flex: 1, gap: 2 },
+  giftTitle: { fontSize: 16, fontWeight: '800', color: giftColors.white, fontFamily: serif },
+  giftSub: { fontSize: 12, color: giftColors.roseLine, lineHeight: 16 },
   section: { gap: space.md },
   sectionTitle: { fontSize: 19, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
   retry: { color: colors.primary, fontSize: 14 },

@@ -117,7 +117,7 @@ export default function Dashboard() {
         <Col xs={24} sm={12} xl={6}>
           <Card className="surface-card"><Statistic title="Sản phẩm đang bán"
             value={stats.active_products} prefix={<CheckCircleOutlined className="stat-icon stat-blue" />} />
-            <div className="kpi-sub">{lowCount ? `${lowCount >= 10 ? '10+' : lowCount} biến thể sắp hết hàng` : 'Kho ổn định'}</div></Card>
+            <div className="kpi-sub">{lowCount ? `${lowCount >= 10 ? '10+' : lowCount} mẫu mã sắp hết hàng` : 'Kho ổn định'}</div></Card>
         </Col>
         <Col xs={24} sm={12} xl={6}>
           <Card className="surface-card"><Statistic title="Khách hàng"
@@ -131,7 +131,7 @@ export default function Dashboard() {
           {[
             { key: 'orders', to: '/orders', icon: <ShoppingOutlined />, tone: 'orange', count: todo.pendingOrders, text: 'đơn chờ xác nhận', ok: 'Không có đơn chờ xác nhận' },
             { key: 'reviews', to: '/reviews', icon: <StarOutlined />, tone: 'purple', count: todo.pendingReviews, text: 'đánh giá chờ duyệt', ok: 'Không có đánh giá chờ duyệt' },
-            { key: 'stock', to: '/inventory', icon: <WarningOutlined />, tone: 'red', count: lowCount, text: 'biến thể sắp hết hàng', ok: 'Tồn kho ổn định' },
+            { key: 'stock', to: '/inventory', icon: <WarningOutlined />, tone: 'red', count: lowCount, text: 'mẫu mã sắp hết hàng', ok: 'Tồn kho ổn định' },
           ].map((t) => (
             <Col xs={24} md={8} key={t.key}>
               <Card className={`surface-card todo-card${t.count > 0 ? ' todo-on' : ''}`} hoverable onClick={() => navigate(t.to)}

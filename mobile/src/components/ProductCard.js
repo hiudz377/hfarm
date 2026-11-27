@@ -12,7 +12,7 @@ const isNewProduct = (createdAt) => !!createdAt && Date.now() - new Date(created
 export default function ProductCard({ product, width, onPress }) {
   const price = product.min_price ?? product.base_price;
   const soldOut = Number(product.total_stock) <= 0;
-  // Giá gạch ngang + nhãn giảm giá khi biến thể rẻ nhất có giá gốc cao hơn
+  // Giá gạch ngang + nhãn giảm giá khi mẫu mã rẻ nhất có giá gốc cao hơn
   const compare = Number(product.compare_at_price) > Number(price) ? Number(product.compare_at_price) : null;
   const off = compare ? Math.round((1 - Number(price) / compare) * 100) : 0;
   const rated = Number(product.rating_count) > 0;
@@ -21,7 +21,7 @@ export default function ProductCard({ product, width, onPress }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ width }, pressed && styles.pressed]} role="link" aria-label={product.name}>
       <View style={styles.imageWrap}>
-        <Photo uri={product.thumbnail} style={styles.image} />
+        <Photo uri={product.thumbnail} style={styles.image} whole />
         {soldOut ? (
           <View style={styles.soldOut}>
             <Text style={styles.soldOutText}>Hết hàng</Text>
@@ -46,6 +46,12 @@ export default function ProductCard({ product, width, onPress }) {
           <Text style={[styles.price, compare && styles.priceSale]}>{money(price)}</Text>
           {compare ? <Text style={styles.compare}>{money(compare)}</Text> : null}
         </View>
+        {product.group_max_percent ? (
+          <View style={styles.groupTag}>
+            <Ionicons name="people" size={12} color={colors.primary} />
+            <Text style={styles.groupText} numberOfLines={1}>Mua nhóm giảm đến {Number(product.group_max_percent)}%</Text>
+          </View>
+        ) : null}
         {rated ? (
           <View style={styles.rating}>
             <Ionicons name="star" size={12} color={colors.gold} />
@@ -68,6 +74,8 @@ const styles = StyleSheet.create({
   price: { fontSize: 15, fontWeight: '800', color: colors.text },
   priceSale: { color: colors.sale },
   compare: { fontSize: 12, color: colors.muted, textDecorationLine: 'line-through' },
+  groupTag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: colors.primarySoft },
+  groupText: { fontSize: 11, fontWeight: '700', color: colors.primaryDark, flexShrink: 1 },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   ratingText: { fontSize: 12, color: colors.muted },
   heart: { position: 'absolute', top: 8, right: 8 },

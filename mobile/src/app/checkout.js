@@ -7,15 +7,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { errMsg } from '@/api/client';
 import { fetchAddresses } from '@/api/addresses';
 import { fetchCart } from '@/api/cart';
+import { createGiftOrder, fetchGiftOptions } from '@/api/gifts';
 import { createOrder, quoteOrder } from '@/api/orders';
 import { fetchPaymentMethods } from '@/api/payments';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
+import GiftCardView from '@/components/GiftCardView';
 import KeyboardView from '@/components/KeyboardView';
 import EmptyState from '@/components/EmptyState';
 import Loading from '@/components/Loading';
 import PriceSummary from '@/components/PriceSummary';
-import { goToTab } from '@/utils/nav';
+import { giftColors, serif } from '@/utils/giftTheme';
+import { giftPayload, resetGiftDraft, useGiftDraft } from '@/utils/giftDraft';
+import { goBack, goToTab } from '@/utils/nav';
 import { goneVariantId } from '@/utils/viMessage';
 import { PAYMENT_METHODS } from '@/utils/payment';
 import { ADDRESSES_KEY, CART_KEY, QUOTE_KEY, afterOrderPlaced, cartIssueCount, cartSignature, useCart } from '@/utils/useCart';
@@ -59,6 +63,13 @@ export default function Checkout() {
   const cart = useCart();
   const items = cart.data?.items ?? [];
 
+  // ---- đơn quà tặng (mở từ màn viết thiệp bằng ?gift=1): chỉ chuyển khoản, gửi kèm thiệp + tùy chọn ----
+  const isGift = params.gift === '1';
+  const draft = useGiftDraft();
+  const giftOptionsQ = useQuery({ queryKey: ['gift-options'], queryFn: fetchGiftOptions, staleTime: 10 * 60 * 1000, enabled: isGift });
+  const giftCard = isGift && !draft.noCard ? giftOptionsQ.data?.cards.find((c) => c.id === draft.templateId) ?? giftOptionsQ.data?.cards[0] ?? null : null;
+  const giftOccasion = giftOptionsQ.data?.occasions.find((o) => o.value === draft.occasion)?.label ?? null;
+
   // ---- địa chỉ ----
   const addressesQ = useQuery({ queryKey: ADDRESSES_KEY, queryFn: fetchAddresses });
   const addresses = addressesQ.data ?? [];
@@ -83,10 +94,13 @@ export default function Checkout() {
 
   // Phương thức do server quyết định: chuyển khoản chỉ hiện khi cửa hàng đã cấu hình tài khoản ngân hàng
   const methodsQ = useQuery({ queryKey: ['payment-methods'], queryFn: fetchPaymentMethods, staleTime: 5 * 60 * 1000 });
-  const available = (methodsQ.data?.methods ?? [{ value: 'COD' }]).map((m) => ({ ...PAYMENT_METHODS.find((p) => p.value === m.value), ...m }))
+  const allMethods = (methodsQ.data?.methods ?? [{ value: 'COD' }]).map((m) => ({ ...PAYMENT_METHODS.find((p) => p.value === m.value), ...m }))
     .filter((m) => m.title);
+  // Đơn quà không có COD: người nhận sẽ phải trả tiền món quà của chính mình (backend cũng từ chối)
+  const available = isGift ? allMethods.filter((m) => m.value === 'BANK_TRANSFER') : allMethods;
   const bank = available.find((m) => m.value === 'BANK_TRANSFER');
-  const chosen = available.some((m) => m.value === method) ? method : 'COD'; // phương thức đã chọn bị tắt thì quay về COD
+  // phương thức đã chọn bị tắt thì quay về COD; đơn quà chỉ có chuyển khoản (null nếu cửa hàng chưa bật)
+  const chosen = isGift ? (bank ? 'BANK_TRANSFER' : null) : (available.some((m) => m.value === method) ? method : 'COD');
 
   // ---- tiền: luôn lấy từ /orders/quote (cùng hàm tính với POST /orders). Có địa chỉ thì phí ship theo vùng của địa chỉ ----
   const quote = useQuery({
@@ -154,16 +168,17 @@ export default function Checkout() {
   };
 
   const place = useMutation({
-    mutationFn: createOrder,
+    mutationFn: isGift ? createGiftOrder : createOrder,
     onSuccess: (order, vars) => {
       router.replace({
         pathname: '/order-success',
         params: {
-          id: String(order.id), code: order.order_code, total: String(order.total_amount), method: vars.paymentMethod,
-          eta: etaText(order.shipping_zone) ?? '',
+          id: String(order.id), code: order.order_code, total: String(order.total_amount), method: isGift ? 'BANK_TRANSFER' : vars.paymentMethod,
+          eta: etaText(order.shipping_zone) ?? '', gift: isGift ? '1' : '',
         },
       });
       afterOrderPlaced(queryClient);
+      if (isGift) resetGiftDraft();
     },
     onError: onOrderError,
     onSettled: () => {
@@ -174,6 +189,8 @@ export default function Checkout() {
   const quoteReady = !!quote.data && !quote.isFetching && !quote.isError;
   let blocked = null;
   if (issues > 0) blocked = 'Giỏ hàng có sản phẩm hết hàng, vượt tồn kho hoặc đã ngừng bán.';
+  else if (isGift && !methodsQ.isPending && !chosen) blocked = 'Cửa hàng chưa bật chuyển khoản nên chưa nhận được đơn quà.';
+  else if (isGift && !draft.noCard && !draft.message.trim()) blocked = 'Thiệp chưa có lời nhắn. Hãy quay lại viết thiệp (hoặc chọn không kèm thiệp).';
   else if (!address) blocked = 'Hãy chọn hoặc thêm địa chỉ giao hàng.';
   else if (!quoteReady) blocked = quote.isError ? 'Chưa tính được tổng tiền.' : null;
   const canPlace = !blocked && quoteReady && !place.isPending;
@@ -181,7 +198,9 @@ export default function Checkout() {
   const onPlace = () => {
     if (submitting.current || place.isPending || !canPlace) return;
     submitting.current = true;
-    place.mutate({ addressId: address.id, paymentMethod: chosen, couponCode: coupon, note: note.trim() });
+    place.mutate(isGift
+      ? { addressId: address.id, couponCode: coupon, note: note.trim(), gift: giftPayload(draft) }
+      : { addressId: address.id, paymentMethod: chosen, couponCode: coupon, note: note.trim() });
   };
 
   // ---- trạng thái cả màn ----
@@ -201,6 +220,27 @@ export default function Checkout() {
           <View style={styles.banner}>
             <Text style={styles.bannerText}>Có sản phẩm hết hàng, vượt tồn kho hoặc đã ngừng bán. Hãy quay lại giỏ hàng để điều chỉnh.</Text>
             <Button title="Về giỏ hàng" variant="outline" onPress={() => goToTab(router, '/cart')} />
+          </View>
+        ) : null}
+
+        {isGift ? (
+          <View style={styles.giftBox}>
+            <View style={styles.giftHead}>
+              <Text style={styles.giftTitle}>🎁 Đơn quà tặng</Text>
+              <Pressable onPress={() => goBack(router, '/gift-card')} hitSlop={8} role="button" aria-label="Sửa thiệp">
+                <Text style={styles.giftEdit}>Sửa thiệp</Text>
+              </Pressable>
+            </View>
+            <View style={styles.giftRow}>
+              {giftCard ? <GiftCardView card={giftCard} message={draft.message} sender={draft.sender.trim()} width={112} compact /> : null}
+              <View style={styles.giftInfo}>
+                {giftOccasion ? <Text style={styles.giftLine}>Dịp: {giftOccasion}</Text> : null}
+                <Text style={styles.giftLine}>{draft.noCard ? 'Không kèm thiệp' : 'Thiệp in giấy bỏ trong hộp'}</Text>
+                <Text style={styles.giftLine}>{draft.hidePrices ? 'Phiếu giao hàng không ghi giá' : 'Phiếu giao hàng có ghi giá'}</Text>
+                <Text style={styles.giftLine}>{draft.wrap ? 'Có gói quà' : 'Không gói quà'}</Text>
+                <Text style={styles.giftLine}>Thanh toán chuyển khoản</Text>
+              </View>
+            </View>
           </View>
         ) : null}
 
@@ -232,6 +272,7 @@ export default function Checkout() {
         </Section>
 
         <Section title="Phương thức thanh toán">
+          {isGift && !methodsQ.isPending && !bank ? <Text style={styles.muted}>Đơn quà chỉ thanh toán bằng chuyển khoản, nhưng cửa hàng chưa bật chuyển khoản.</Text> : null}
           {available.map((m) => (
             <Radio key={m.value} selected={chosen === m.value} onPress={() => setMethod(m.value)} title={m.title} icon={m.icon}>
               <Text style={styles.muted}>{m.hint}</Text>
@@ -295,6 +336,7 @@ export default function Checkout() {
               <PriceSummary
                 subtotal={quote.data.subtotal}
                 discount={quote.data.discount_amount}
+                groupDiscount={quote.data.group_discount ?? 0}
                 couponCode={coupon}
                 shipping={quote.data.shipping_fee}
                 total={quote.data.total_amount}
@@ -319,7 +361,7 @@ export default function Checkout() {
             {/* quote lỗi thì react-query vẫn giữ data của lần thành công trước: không hiện tổng cũ gây hiểu nhầm */}
             <Text style={styles.footerTotal}>{quote.data && !quote.isError ? money(quote.data.total_amount) : '--'}</Text>
           </View>
-          <Button title="Đặt hàng" style={styles.placeBtn} disabled={!canPlace} loading={place.isPending} onPress={onPlace} />
+          <Button title={isGift ? 'Đặt đơn quà' : 'Đặt hàng'} style={styles.placeBtn} disabled={!canPlace} loading={place.isPending} onPress={onPlace} />
         </View>
       </View>
     </KeyboardView>
@@ -330,6 +372,13 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { padding: space.lg, gap: space.md, paddingBottom: space.xl },
   flex: { flex: 1 },
+  giftBox: { gap: space.md, padding: space.md, borderRadius: radius.lg, backgroundColor: giftColors.rose, borderWidth: 1, borderColor: giftColors.roseLine },
+  giftHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  giftTitle: { fontSize: 16, fontWeight: '800', color: giftColors.wine, fontFamily: serif },
+  giftEdit: { fontSize: 13, fontWeight: '800', color: giftColors.wine, textDecorationLine: 'underline' },
+  giftRow: { flexDirection: 'row', gap: space.md, alignItems: 'center' },
+  giftInfo: { flex: 1, gap: 4 },
+  giftLine: { fontSize: 13, color: giftColors.ink, lineHeight: 18 },
   hintBox: { flexDirection: 'row', gap: space.sm, padding: space.md, borderRadius: radius.md, backgroundColor: colors.primarySoft },
   hintText: { flex: 1, fontSize: 12, color: colors.text, lineHeight: 17 },
   optionIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft, alignItems: 'center', justifyContent: 'center' },
